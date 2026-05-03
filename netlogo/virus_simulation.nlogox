@@ -824,39 +824,114 @@ end
   </widgets>
   <info>## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+This model simulates virus propagation on networks using grp-SIS dynamics:
+- S susceptible
+- I infected
+- S susceptible again after recovery
+
+The model combines:
+1) a micro-level agent-based simulation on an explicit network, and
+2) a classical mean-field SIS approach as a reference curve.
+
+This lets you observe how network structure, immunization, and the shape of the recovery-time distribution influence prevalence.
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+Each run proceeds as follows:
+
+1. Setup
+- Creates `num-nodes` agents.
+- Builds a network based on `interconnection-structure` and, when applicable, `network-type`.
+- Computes node degrees.
+- Applies immunization (`none`, `random`, `high-degree first`).
+- Infects `initial-infected` random susceptible nodes.
+
+2. Per-tick dynamics
+- Each infected node tries to infect susceptible neighbors with probability `infection-prob`.
+- At infection, each infected node receives an individual `recovery-deadline` drawn from `recovery-distribution`.
+- Once `infection-time` reaches `recovery-deadline`, the node becomes susceptible again (SIS).
+
+3. Measurements
+- Monitors show counts of susceptible, infected, immune, and cumulative recoveries.
+- The plot "Prevalence: grp-SIS vs mean-field" compares microsimulation prevalence with `rho-I-mf`.
+- The plot "Recovery time distribution" shows a histogram of sampled recovery times.
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+Recommended workflow:
+
+1. Choose the network setup
+- `interconnection-structure`: All vs. All, Lattice4, Lattice8, Ring, or other.
+- `network-type`: only relevant when `interconnection-structure` is set to other.
+- `num-nodes`: number of agents.
+- `avg-degree`: target average degree for random networks.
+- `rewiring-prob`: only used for Watts-Strogatz.
+
+2. Choose epidemiological parameters
+- `initial-infected`: initial number of infected nodes.
+- `infection-prob`: transmission probability per infectious contact per tick.
+- `recovery-distribution`: shape of recovery-time distribution.
+- `recovery-mean`: mean recovery time.
+- `power-law-lambda`, `lognormal-sigma`, `gamma-shape`, `weibull-shape`: shape parameters for specific distributions.
+- `max-ticks`: maximum simulation duration.
+
+3. Choose immunization settings
+- `immunization-strategy`: none, random, high-degree first.
+- `immunized-fraction`: fraction of nodes immunized before the run starts.
+
+4. Start the simulation
+- Click `setup`.
+- Click `go` (forever button) to run continuously.
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+- Threshold behavior around `tau-sim` (`infection-prob` times `recovery-mean`).
+- Differences between network types with similar average degree.
+- The effect of heavy-tailed recovery times on long-run prevalence.
+- Effectiveness of high-degree immunization versus random immunization.
+- Deviations between microsimulation and mean-field curves for non-homogeneous networks.
 
 ## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+- Keep `avg-degree` fixed and compare Ring, Lattice4, and Erdos-Renyi.
+- Keep `recovery-mean` fixed and vary only `recovery-distribution`.
+- Sweep `infection-prob` around the critical region and track extinction versus endemic outcomes.
+- Compare no immunization, random immunization, and high-degree-first immunization at the same `immunized-fraction`.
+- Increase `num-nodes` and check whether threshold behavior becomes more stable.
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+- Add weighted or directed links.
+- Add dynamic networks where links can appear and disappear over time.
+- Extend to SIR or SEIR with explicit recovered or exposed states.
+- Make infection probability depend on node properties or degree.
+- Add interventions such as temporary isolation, contact reduction, or time-dependent immunization.
+- Export full per-run time series for external analysis.
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+- Uses individual turtle variables (`infection-time`, `recovery-deadline`, `degree`).
+- Supports multiple network topologies in one codebase.
+- Uses custom reporters for BehaviorSpace output, including late-window prevalence.
+- Stores sampled recovery times in `recovery-times` and visualizes them as a histogram.
+- Compares agent-level dynamics with a macro mean-field trajectory in the same model.
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+Related models in the NetLogo Models Library include:
+- Virus on a Network
+- Small Worlds
+- Epidemic-style compartment models
+
+These models are useful references for network structure, epidemic thresholds, and visualization choices.
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Model basis and theoretical inspiration:
+- IntechOpen (2025), Simulation of Virus Propagation in Complex Networks Using NetLogo Multiagent Testbed.
+- Tang et al., SIS epidemic modelling on homogeneous networked systems with a general recovering process and a mean-field perspective.
+
+Implementation: NetLogo 7.0.3 model file `virus_simulation.nlogox`.
 </info>
   <turtleShapes>
     <shape name="default" rotatable="true" editableColorIndex="0">
