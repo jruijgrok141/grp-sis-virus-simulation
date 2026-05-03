@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NetLogo 7 imports this via NLogoXMLLoader + LabXMLLoader (not the old DOM LabLoader).
+  Metrics and parameter sets MUST be wrapped in <metrics> and <constants>; bare <metric>
+  or <enumeratedValueSet> under <experiment> triggers "Unknown BehaviorSpace XML node type".
+  Chooser strings: NetLogo literals in value attributes, e.g. value="&quot;other&quot;".
+  Tang et al. (2025) grp-SIS: exponential, power law, lognormal recovery (Sec. 2.3).
+
+  Headless runs (scripts/run_pipeline.py) use experiments embedded in virus_simulation.nlogox,
+  not this file as --setup-file (NetLogo 7.0.3 headless then throws NoSuchElementException).
+  After editing here, merge the <experiments> block into the .nlogox without comments that
+  contain two consecutive hyphens.
+-->
+<experiments>
+  <experiment name="01-export-networks" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false">
+    <setup>set bs-collect-metrics? false
+set immunization-strategy "none"
+set immunized-fraction 0
+setup
+export-network-edges (word "../output/edges/edges_" safe-net-label "_" expt-seed ".csv")</setup>
+    <go>wait 0</go>
+    <exitCondition>true</exitCondition>
+    <metrics>
+      <metric>safe-net-label</metric>
+      <metric>count links</metric>
+      <metric>num-nodes</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;Lattice4&quot;"/>
+        <value value="&quot;Ring&quot;"/>
+        <!-- For complex random graphs (ER / WS / BA) use interconnection-structure = \"other\" -->
+        <value value="&quot;other&quot;"/>
+      </enumeratedValueSet>
+      <!-- Align ER export with baseline experiments (edges_ER_10001.csv ↔ lambda_max). -->
+      <enumeratedValueSet variable="expt-seed">
+        <value value="10001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <!-- legacy small networks + baseline ER size -->
+        <value value="200"/>
+        <value value="2000"/>
+      </enumeratedValueSet>
+      <!-- For interconnection-structure = \"other\", pick an explicit random graph type.
+           safe-net-label maps \"Erdos-Renyi (random)\" to net_label = ER. -->
+      <enumeratedValueSet variable="network-type">
+        <value value="&quot;Erdos-Renyi (random)&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;3000&quot;"/>
+      </enumeratedValueSet>
+    </constants>
+  </experiment>
+  <experiment name="02-threshold-exponential" repetitions="8" sequentialRunOrder="true" runMetricsEveryStep="false">
+    <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "exponential"
+setup</setup>
+    <go>go</go>
+    <exitCondition>(ticks &gt;= sim-tick-limit) or (not any? turtles with [state = "infected"])</exitCondition>
+    <metrics>
+      <metric>bs-out-extinct</metric>
+      <metric>bs-out-final-tick</metric>
+      <metric>bs-out-late-mean-prevalence</metric>
+      <metric>bs-out-tau-sim</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;Lattice4&quot;"/>
+        <value value="&quot;Ring&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="expt-seed">
+        <value value="1001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <value value="200"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="recovery-mean">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;3000&quot;"/>
+      </enumeratedValueSet>
+      <steppedValueSet variable="infection-prob" first="0.02" step="0.03" last="0.56"/>
+    </constants>
+  </experiment>
+  <experiment name="03-threshold-power-law-Tang" repetitions="8" sequentialRunOrder="true" runMetricsEveryStep="false">
+    <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "power law (Tang)"
+set power-law-lambda 4.24
+setup</setup>
+    <go>go</go>
+    <exitCondition>(ticks &gt;= sim-tick-limit) or (not any? turtles with [state = "infected"])</exitCondition>
+    <metrics>
+      <metric>bs-out-extinct</metric>
+      <metric>bs-out-final-tick</metric>
+      <metric>bs-out-late-mean-prevalence</metric>
+      <metric>bs-out-tau-sim</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;Lattice4&quot;"/>
+        <value value="&quot;Ring&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="expt-seed">
+        <value value="1001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <value value="200"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="recovery-mean">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="power-law-lambda">
+        <value value="4.24"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;3000&quot;"/>
+      </enumeratedValueSet>
+      <steppedValueSet variable="infection-prob" first="0.02" step="0.03" last="0.56"/>
+    </constants>
+  </experiment>
+  <experiment name="04-threshold-lognormal-Tang" repetitions="8" sequentialRunOrder="true" runMetricsEveryStep="false">
+    <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "lognormal (Tang)"
+set lognormal-sigma 1
+setup</setup>
+    <go>go</go>
+    <exitCondition>(ticks &gt;= sim-tick-limit) or (not any? turtles with [state = "infected"])</exitCondition>
+    <metrics>
+      <metric>bs-out-extinct</metric>
+      <metric>bs-out-final-tick</metric>
+      <metric>bs-out-late-mean-prevalence</metric>
+      <metric>bs-out-tau-sim</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;Lattice4&quot;"/>
+        <value value="&quot;Ring&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="expt-seed">
+        <value value="1001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <value value="200"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="recovery-mean">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="lognormal-sigma">
+        <value value="1"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;3000&quot;"/>
+      </enumeratedValueSet>
+      <steppedValueSet variable="infection-prob" first="0.02" step="0.03" last="0.56"/>
+    </constants>
+  </experiment>
+  <experiment name="05-baseline-empirical-threshold-ER" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
+    <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "exponential"
+setup</setup>
+    <go>go</go>
+    <exitCondition>(ticks &gt;= sim-tick-limit) or (not any? turtles with [state = "infected"])</exitCondition>
+    <metrics>
+      <metric>bs-out-extinct</metric>
+      <metric>bs-out-final-tick</metric>
+      <metric>bs-out-late-mean-prevalence</metric>
+      <metric>bs-out-tau-sim</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <!-- Use \"other\" + network-type = \"Erdos-Renyi (random)\" so that safe-net-label reports \"ER\" -->
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;other&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="network-type">
+        <value value="&quot;Erdos-Renyi (random)&quot;"/>
+      </enumeratedValueSet>
+      <!-- Same graph realization across recovery regimes (cf. proposal); process noise via repetitions. -->
+      <enumeratedValueSet variable="expt-seed">
+        <value value="10001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <value value="2000"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <!-- unused for ER, keep default value for compatibility -->
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="recovery-mean">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;10000&quot;"/>
+      </enumeratedValueSet>
+      <!-- Fine sweep around beta_pred ≈ 1/(lambda_max * E[W]); step 0.002 on [0.018, 0.048]. -->
+      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"/>
+    </constants>
+  </experiment>
+  <experiment name="06-baseline-ER-power-law-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
+    <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "power law (Tang)"
+set power-law-lambda 4.24
+setup</setup>
+    <go>go</go>
+    <exitCondition>(ticks &gt;= sim-tick-limit) or (not any? turtles with [state = "infected"])</exitCondition>
+    <metrics>
+      <metric>bs-out-extinct</metric>
+      <metric>bs-out-final-tick</metric>
+      <metric>bs-out-late-mean-prevalence</metric>
+      <metric>bs-out-tau-sim</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;other&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="network-type">
+        <value value="&quot;Erdos-Renyi (random)&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="expt-seed">
+        <value value="10001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <value value="2000"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="recovery-mean">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="power-law-lambda">
+        <value value="4.24"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;10000&quot;"/>
+      </enumeratedValueSet>
+      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"/>
+    </constants>
+  </experiment>
+  <experiment name="07-baseline-ER-lognormal-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
+    <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "lognormal (Tang)"
+set lognormal-sigma 1
+setup</setup>
+    <go>go</go>
+    <exitCondition>(ticks &gt;= sim-tick-limit) or (not any? turtles with [state = "infected"])</exitCondition>
+    <metrics>
+      <metric>bs-out-extinct</metric>
+      <metric>bs-out-final-tick</metric>
+      <metric>bs-out-late-mean-prevalence</metric>
+      <metric>bs-out-tau-sim</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;other&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="network-type">
+        <value value="&quot;Erdos-Renyi (random)&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="expt-seed">
+        <value value="10001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <value value="2000"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="recovery-mean">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="lognormal-sigma">
+        <value value="1"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;10000&quot;"/>
+      </enumeratedValueSet>
+      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"/>
+    </constants>
+  </experiment>
+  <!-- Per-tick grp-SIS vs classical mean-field SIS (same ODE as update-mean-field-SIS in-code).
+       Run headless: python scripts/run_pipeline.py --experiment 08-dynamics-trajectory-ER
+       Not part of --all (large CSV); for plots see notebooks/virus_dynamics_prevalence.ipynb -->
+  <experiment name="08-dynamics-trajectory-ER" repetitions="5" sequentialRunOrder="true" runMetricsEveryStep="true">
+    <setup>set bs-collect-metrics? false
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "exponential"
+setup</setup>
+    <go>go</go>
+    <exitCondition>(ticks &gt;= sim-tick-limit) or (not any? turtles with [state = "infected"])</exitCondition>
+    <metrics>
+      <metric>bs-out-prev-grp</metric>
+      <metric>bs-out-prev-mf</metric>
+      <metric>bs-out-count-S</metric>
+      <metric>bs-out-count-I</metric>
+      <metric>bs-out-mean-degree</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="interconnection-structure">
+        <value value="&quot;other&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="network-type">
+        <value value="&quot;Erdos-Renyi (random)&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="expt-seed">
+        <value value="10001"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="num-nodes">
+        <value value="2000"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="avg-degree">
+        <value value="6"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="rewiring-prob">
+        <value value="0.07"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="initial-infected">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="recovery-mean">
+        <value value="5"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="max-ticks">
+        <value value="&quot;2000&quot;"/>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="infection-prob">
+        <value value="0.028"/>
+      </enumeratedValueSet>
+    </constants>
+  </experiment>
+</experiments>
