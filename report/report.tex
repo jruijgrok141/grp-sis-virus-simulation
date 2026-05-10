@@ -163,6 +163,13 @@ In the NetLogo implementation, one \emph{tick} is one discrete time step; \emph{
 
 Each infected agent draws an integer recovery deadline $W\ge 1$ (ticks) from \texttt{draw-recovery-time} at infection; the agent recovers when the infection clock reaches that deadline (\texttt{recovery-step} in \path{netlogo/virus_simulation.nlogox}). Exponential draws use a geometric waiting time with mean \texttt{recovery-mean}. Lognormal (Tang) draws $W$ from a lognormal with \texttt{lognormal-sigma} and mean fixed to \texttt{recovery-mean}. Power law (Tang) draws from a shifted Pareto with shape \texttt{power-law-lambda} and mean fixed to \texttt{recovery-mean} via the Tang parameterisation. All draws are rounded to integer ticks and truncated below at one tick, so $\mathbb{E}[W]$ in the simulation matches the intended mean up to discretisation.
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.92\textwidth]{fig_recovery_pdfs.png}
+  \caption{Probability density functions of the \emph{continuous} recovery laws corresponding to the three regimes in BehaviorSpace experiments~\texttt{05}--\texttt{07} (same \texttt{recovery-mean}, \texttt{power-law-lambda}, and \texttt{lognormal-sigma} as in \protect\path{netlogo/behaviorspace_experiments.xml}). All three satisfy $\mathbb{E}[W]=5$; the variances (legend) differ, with the heavy-tailed laws spreading mass toward longer infectious periods. The exponential curve is the continuous-time Markovian reference with rate $1/\mathbb{E}[W]$ (the implementation samples a continuous draw and rounds to ticks, as in \protect\path{netlogo/virus_simulation.nlogox}).}
+  \label{fig:recovery-pdfs}
+\end{figure}
+
 \paragraph{Procedure (per new infection).}
 \texttt{draw-recovery-time} in NetLogo: read regime from the chooser; if exponential, sample a geometric duration with the configured mean; if lognormal (Tang), sample from the lognormal with fixed $\sigma$ and scale set so the theoretical mean matches \texttt{recovery-mean}; if power law (Tang), sample from the shifted Pareto with fixed shape and scale set for the same mean; round to integer ticks, replace any value below $1$ by $1$; store the draw as the agent's recovery countdown and decrement it once per tick until recovery. The BehaviorSpace sweep holds \texttt{recovery-mean} and regime-specific shape parameters fixed while stepping \texttt{infection-prob}; each $(\beta,\text{regime})$ cell uses \texttt{repetitions}${}=24$ independent stochastic replicates (estimation protocol above).
 

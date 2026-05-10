@@ -1,17 +1,17 @@
 \BOOKMARK [1][-]{section*.2}{Notation and symbols}{}% 1
 \BOOKMARK [1][-]{section.7}{Introduction}{}% 2
 \BOOKMARK [1][-]{section.10}{Methods}{}% 3
-\BOOKMARK [1][-]{section.18}{Results}{}% 4
-\BOOKMARK [2][-]{subsection.19}{Spectral and mean-field references on the exported ER graph}{section.18}% 5
-\BOOKMARK [2][-]{subsection.20}{Survival curves and empirical thresholds}{section.18}% 6
-\BOOKMARK [2][-]{subsection.29}{Robustness across ER draws and extinction conditioning on beta}{section.18}% 7
-\BOOKMARK [2][-]{subsection.36}{Microscopic vs. mean-field prevalence}{section.18}% 8
-\BOOKMARK [1][-]{section.39}{Discussion}{}% 9
-\BOOKMARK [1][-]{section.43}{Conclusion}{}% 10
-\BOOKMARK [1][-]{section*.45}{Data and code availability}{}% 11
-\BOOKMARK [1][-]{appendix.47}{BehaviorSpace experiment configurations \(NetLogo\)}{}% 12
-\BOOKMARK [2][-]{subsection.48}{Common elements}{appendix.47}% 13
-\BOOKMARK [2][-]{subsection.49}{Experiment 01: network export}{appendix.47}% 14
-\BOOKMARK [2][-]{subsection.51}{Experiments 02\20504: optional coarse sweeps on regular structures}{appendix.47}% 15
-\BOOKMARK [2][-]{subsection.55}{Experiments 05\20507: ER baseline experiments \(main results\)}{appendix.47}% 16
-\BOOKMARK [2][-]{subsection.59}{Experiment 08: prevalence trajectories \(grp-SIS vs mean-field\)}{appendix.47}% 17
+\BOOKMARK [1][-]{section.20}{Results}{}% 4
+\BOOKMARK [2][-]{subsection.21}{Spectral and mean-field references on the exported ER graph}{section.20}% 5
+\BOOKMARK [2][-]{subsection.22}{Survival curves and empirical thresholds}{section.20}% 6
+\BOOKMARK [2][-]{subsection.31}{Robustness across ER draws and extinction conditioning on beta}{section.20}% 7
+\BOOKMARK [2][-]{subsection.38}{Microscopic vs. mean-field prevalence}{section.20}% 8
+\BOOKMARK [1][-]{section.41}{Discussion}{}% 9
+\BOOKMARK [1][-]{section.45}{Conclusion}{}% 10
+\BOOKMARK [1][-]{section*.47}{Data and code availability}{}% 11
+\BOOKMARK [1][-]{appendix.49}{BehaviorSpace experiment configurations \(NetLogo\)}{}% 12
+\BOOKMARK [2][-]{subsection.50}{Common elements}{appendix.49}% 13
+\BOOKMARK [2][-]{subsection.51}{Experiment 01: network export}{appendix.49}% 14
+\BOOKMARK [2][-]{subsection.53}{Experiments 02\20504: optional coarse sweeps on regular structures}{appendix.49}% 15
+\BOOKMARK [2][-]{subsection.57}{Experiments 05\20507: ER baseline experiments \(main results\)}{appendix.49}% 16
+\BOOKMARK [2][-]{subsection.61}{Experiment 08: prevalence trajectories \(grp-SIS vs mean-field\)}{appendix.49}% 17

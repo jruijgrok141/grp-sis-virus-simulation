@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.19 (MiKTeX 2.9.6730 64-bit) (preloaded format=pdflatex 2018.9.6)  10 MAY 2026 14:02
+This is pdfTeX, Version 3.14159265-2.6-1.40.19 (MiKTeX 2.9.6730 64-bit) (preloaded format=pdflatex 2018.9.6)  10 MAY 2026 16:24
 entering extended mode
 **./report.tex
 (report.tex
@@ -439,67 +439,73 @@ Overfull \hbox (7.9529pt too wide) in paragraph at lines 148--149
  []
 
 [5]
-Overfull \hbox (40.414pt too wide) in paragraph at lines 173--174
+<fig_recovery_pdfs.png, id=142, 592.614pt x 361.35pt>
+File: fig_recovery_pdfs.png Graphic file (type png)
+<use fig_recovery_pdfs.png>
+Package pdftex.def Info: fig_recovery_pdfs.png  used on input line 168.
+(pdftex.def)             Requested size: 416.72963pt x 254.10667pt.
+ [6 <./fig_recovery_pdfs.png>]
+Overfull \hbox (40.414pt too wide) in paragraph at lines 180--181
 \OT1/cmtt/m/n/10.95 edges / edges _ ER _ <[]seed >[] .csv$ \OT1/cmr/m/n/10.95 o
 nly), thresh-old ex-per-i-ments \OT1/cmtt/m/n/10.95 05\OT1/cmr/m/n/10.95 --\OT1
 /cmtt/m/n/10.95 07\OT1/cmr/m/n/10.95 , and \OT1/cmtt/m/n/10.95 08-dynamics-traj
 ectory-ER
  []
 
-[6]
-<fig_er_survival_vs_beta.png, id=152, 614.295pt x 361.35pt>
+<fig_er_survival_vs_beta.png, id=155, 614.295pt x 361.35pt>
 File: fig_er_survival_vs_beta.png Graphic file (type png)
 <use fig_er_survival_vs_beta.png>
-Package pdftex.def Info: fig_er_survival_vs_beta.png  used on input line 202.
+Package pdftex.def Info: fig_er_survival_vs_beta.png  used on input line 209.
 (pdftex.def)             Requested size: 385.02547pt x 226.4883pt.
-<fig_er_threshold_ratio_bar.png, id=157, 469.755pt x 303.534pt>
+<fig_er_threshold_ratio_bar.png, id=160, 469.755pt x 303.534pt>
 File: fig_er_threshold_ratio_bar.png Graphic file (type png)
 <use fig_er_threshold_ratio_bar.png>
-Package pdftex.def Info: fig_er_threshold_ratio_bar.png  used on input line 234
+Package pdftex.def Info: fig_er_threshold_ratio_bar.png  used on input line 241
 .
 (pdftex.def)             Requested size: 280.83788pt x 181.46411pt.
-<fig_er_median_extinct_tick.png, id=158, 469.755pt x 289.08pt>
+<fig_er_median_extinct_tick.png, id=161, 469.755pt x 289.08pt>
 File: fig_er_median_extinct_tick.png Graphic file (type png)
 <use fig_er_median_extinct_tick.png>
-Package pdftex.def Info: fig_er_median_extinct_tick.png  used on input line 241
+Package pdftex.def Info: fig_er_median_extinct_tick.png  used on input line 248
 .
 (pdftex.def)             Requested size: 280.83788pt x 172.82297pt.
- [7 <./fig_er_survival_vs_beta.png>] [8 <./fig_er_threshold_ratio_bar.png> <./f
-ig_er_median_extinct_tick.png>]
-<fig_er_threshold_ratio_by_seed.png, id=186, 499.26524pt x 223.43475pt>
+[7] [8 <./fig_er_survival_vs_beta.png> <./fig_er_threshold_ratio_bar.png>]
+<fig_er_threshold_ratio_by_seed.png, id=188, 499.26524pt x 223.43475pt>
 File: fig_er_threshold_ratio_by_seed.png Graphic file (type png)
 <use fig_er_threshold_ratio_by_seed.png>
 Package pdftex.def Info: fig_er_threshold_ratio_by_seed.png  used on input line
- 253.
+ 260.
 (pdftex.def)             Requested size: 452.9679pt x 202.71907pt.
-<fig_er_extinct_median_vs_beta_by_seed.png, id=187, 406.97044pt x 361.80168pt>
+<fig_er_extinct_median_vs_beta_by_seed.png, id=189, 1120.185pt x 361.80168pt>
 File: fig_er_extinct_median_vs_beta_by_seed.png Graphic file (type png)
 <use fig_er_extinct_median_vs_beta_by_seed.png>
 Package pdftex.def Info: fig_er_extinct_median_vs_beta_by_seed.png  used on inp
-ut line 260.
-(pdftex.def)             Requested size: 452.9679pt x 402.69217pt.
-<fig_er_extinct_tick_violin_by_beta.png, id=188, 643.203pt x 616.10175pt>
+ut line 267.
+(pdftex.def)             Requested size: 452.9679pt x 146.30252pt.
+<fig_er_extinct_tick_violin_by_beta.png, id=190, 643.203pt x 616.10175pt>
 File: fig_er_extinct_tick_violin_by_beta.png Graphic file (type png)
 <use fig_er_extinct_tick_violin_by_beta.png>
 Package pdftex.def Info: fig_er_extinct_tick_violin_by_beta.png  used on input 
-line 267.
+line 274.
 (pdftex.def)             Requested size: 416.72963pt x 399.17346pt.
-<fig_er_prevalence_trajectory.png, id=190, 578.16pt x 325.215pt>
+
+[9 <./fig_er_median_extinct_tick.png> <./fig_er_threshold_ratio_by_seed.png>]
+[10 <./fig_er_extinct_median_vs_beta_by_seed.png> <./fig_er_extinct_tick_violin
+_by_beta.png>]
+<fig_er_prevalence_trajectory.png, id=212, 578.16pt x 325.215pt>
 File: fig_er_prevalence_trajectory.png Graphic file (type png)
 <use fig_er_prevalence_trajectory.png>
 Package pdftex.def Info: fig_er_prevalence_trajectory.png  used on input line 2
-77.
+84.
 (pdftex.def)             Requested size: 371.43698pt x 208.93086pt.
- [9 <./fig_er_threshold_ratio_by_seed.png>]
-[10 <./fig_er_extinct_median_vs_beta_by_seed.png>] [11 <./fig_er_extinct_tick_v
-iolin_by_beta.png> <./fig_er_prevalence_trajectory.png>] [12] [13]
-Underfull \hbox (badness 10000) in paragraph at lines 357--358
+ [11 <./fig_er_prevalence_trajectory.png>] [12]
+Underfull \hbox (badness 10000) in paragraph at lines 364--365
 []\OT1/cmr/bx/n/10.95 Key con-trolled set-tings (re-ported be-low)\OT1/cmr/m/n/
 10.95 : net-work spec-i-fi-ca-tion
  []
 
 
-Underfull \hbox (badness 3557) in paragraph at lines 357--358
+Underfull \hbox (badness 3557) in paragraph at lines 364--365
 \OT1/cmr/m/n/10.95 (\OT1/cmtt/m/n/10.95 interconnection-structure\OT1/cmr/m/n/1
 0.95 , \OT1/cmtt/m/n/10.95 network-type\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95
  expt-seed\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95 num-nodes\OT1/cmr/m/n/10.95 
@@ -507,16 +513,16 @@ Underfull \hbox (badness 3557) in paragraph at lines 357--358
  []
 
 LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <10.95> not available
-(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 362.
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 369.
 
-Underfull \hbox (badness 10000) in paragraph at lines 384--385
+Underfull \hbox (badness 10000) in paragraph at lines 391--392
 []\OT1/cmr/bx/n/10.95 Metrics\OT1/cmr/m/n/10.95 : \OT1/cmtt/m/n/10.95 bs-out-ex
 tinct\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95 bs-out-final-tick\OT1/cmr/m/n/10.
 95 , \OT1/cmtt/m/n/10.95 bs-out-late-mean-prevalence\OT1/cmr/m/n/10.95 ,
  []
 
 
-Underfull \hbox (badness 2932) in paragraph at lines 385--386
+Underfull \hbox (badness 2932) in paragraph at lines 392--393
 []\OT1/cmr/bx/n/10.95 Constants and sweeps\OT1/cmr/m/n/10.95 : \OT1/cmtt/m/n/10
 .95 interconnection-structure $\OMS/cmsy/m/n/10.95 2$ f\OT1/cmtt/m/n/10.95 "Lat
 tice4"\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95 "Ring"\OMS/cmsy/m/n/10.95 g\OT1/
@@ -524,77 +530,77 @@ cmr/m/n/10.95 ;
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 385--386
+Underfull \hbox (badness 10000) in paragraph at lines 392--393
 \OT1/cmtt/m/n/10.95 expt-seed$\OT1/cmr/m/n/10.95 =$1001; \OT1/cmtt/m/n/10.95 nu
 m-nodes$\OT1/cmr/m/n/10.95 =$200; \OT1/cmtt/m/n/10.95 avg-degree$\OT1/cmr/m/n/1
 0.95 =$6; \OT1/cmtt/m/n/10.95 initial-infected$\OT1/cmr/m/n/10.95 =$5;
  []
 
 
-Underfull \hbox (badness 1281) in paragraph at lines 385--386
+Underfull \hbox (badness 1281) in paragraph at lines 392--393
 \OT1/cmtt/m/n/10.95 recovery-mean$\OT1/cmr/m/n/10.95 =$5; \OT1/cmtt/m/n/10.95 m
 ax-ticks$\OT1/cmr/m/n/10.95 =$3000; stepped \OT1/cmtt/m/n/10.95 infection-prob 
 \OT1/cmr/m/n/10.95 from 0.02 to 0.56 in
  []
 
-[14
+[13
 
 ]
-Underfull \hbox (badness 2547) in paragraph at lines 393--394
+Underfull \hbox (badness 2547) in paragraph at lines 400--401
 []\OT1/cmr/bx/n/10.95 Constants and sweeps\OT1/cmr/m/n/10.95 : same as ex-per-i
 -ment 02, with the ad-di-tional con-stant
  []
 
 
-Underfull \hbox (badness 2547) in paragraph at lines 401--402
+Underfull \hbox (badness 2547) in paragraph at lines 408--409
 []\OT1/cmr/bx/n/10.95 Constants and sweeps\OT1/cmr/m/n/10.95 : same as ex-per-i
 -ment 02, with the ad-di-tional con-stant
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 408--409
+Underfull \hbox (badness 10000) in paragraph at lines 415--416
 []\OT1/cmr/bx/n/10.95 Network\OT1/cmr/m/n/10.95 : \OT1/cmtt/m/n/10.95 interconn
 ection-structure="other"\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95 network-type="
 Erdos-Renyi
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 411--412
+Underfull \hbox (badness 10000) in paragraph at lines 418--419
 []\OT1/cmr/bx/n/10.95 Metrics\OT1/cmr/m/n/10.95 : \OT1/cmtt/m/n/10.95 bs-out-ex
 tinct\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95 bs-out-final-tick\OT1/cmr/m/n/10.
 95 , \OT1/cmtt/m/n/10.95 bs-out-late-mean-prevalence\OT1/cmr/m/n/10.95 ,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 418--419
+Underfull \hbox (badness 10000) in paragraph at lines 425--426
 []\OT1/cmr/bx/n/10.95 Recovery law\OT1/cmr/m/n/10.95 : \OT1/cmtt/m/n/10.95 "pow
 er law (Tang)" \OT1/cmr/m/n/10.95 with \OT1/cmtt/m/n/10.95 recovery-mean$\OT1/c
 mr/m/n/10.95 =$5 and
  []
 
-[15]
-Underfull \hbox (badness 7030) in paragraph at lines 439--440
+[14]
+Underfull \hbox (badness 7030) in paragraph at lines 446--447
 []\OT1/cmr/bx/n/10.95 Metrics\OT1/cmr/m/n/10.95 : \OT1/cmtt/m/n/10.95 bs-out-pr
 ev-grp\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95 bs-out-prev-mf\OT1/cmr/m/n/10.95
  , \OT1/cmtt/m/n/10.95 bs-out-count-S\OT1/cmr/m/n/10.95 , \OT1/cmtt/m/n/10.95 b
 s-out-count-I\OT1/cmr/m/n/10.95 ,
  []
 
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 442.
-[16]
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 442.
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 449.
+[15]
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 449.
  (report.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 442.
-Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 442.
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 449.
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 449.
 Package rerunfilecheck Info: File `report.out' has not changed.
-(rerunfilecheck)             Checksum: 8F1B2FD1757C1B2F038AE6E3B5F790EF;1337.
-Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 442.
+(rerunfilecheck)             Checksum: 9D5638DCE718A93CB7AA38BA1C4CDA4D;1337.
+Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 449.
  ) 
 Here is how much of TeX's memory you used:
- 7048 strings out of 492973
- 102237 string characters out of 3135933
- 210377 words of memory out of 3000000
- 10738 multiletter control sequences out of 15000+200000
+ 7055 strings out of 492973
+ 102391 string characters out of 3135933
+ 210994 words of memory out of 3000000
+ 10743 multiletter control sequences out of 15000+200000
  16781 words of font info for 66 fonts, out of 3000000 for 9000
  1141 hyphenation exceptions out of 8191
  28i,12n,32p,1824b,444s stack positions out of 5000i,500n,10000p,200000b,50000s
@@ -617,9 +623,9 @@ cmsy8.pfb><C:/Program Files/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmti10.pf
 b><C:/Program Files/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmti9.pfb><C:/Pro
 gram Files/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmtt10.pfb><C:/Program Fil
 es/MiKTeX 2.9/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on report.pdf (16 pages, 751034 bytes).
+Output written on report.pdf (15 pages, 867168 bytes).
 PDF statistics:
  343 PDF objects out of 1000 (max. 8388607)
- 83 named destinations out of 1000 (max. 500000)
- 177 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 84 named destinations out of 1000 (max. 500000)
+ 182 words of extra memory for PDF output out of 10000 (max. 10000000)
 
