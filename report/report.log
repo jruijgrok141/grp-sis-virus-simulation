@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.19 (MiKTeX 2.9.6730 64-bit) (preloaded format=pdflatex 2018.9.6)  10 MAY 2026 16:44
+This is pdfTeX, Version 3.14159265-2.6-1.40.19 (MiKTeX 2.9.6730 64-bit) (preloaded format=pdflatex 2018.9.6)  10 MAY 2026 16:55
 entering extended mode
 **./report.tex
 (report.tex
@@ -471,12 +471,12 @@ Package pdftex.def Info: fig_er_median_extinct_tick.png  used on input line 255
 .
 (pdftex.def)             Requested size: 280.83788pt x 172.82297pt.
  [8] [9 <./fig_er_survival_vs_beta.png> <./fig_er_threshold_ratio_bar.png>]
-<fig_er_threshold_ratio_by_seed.png, id=200, 499.26524pt x 223.43475pt>
+<fig_er_threshold_ratio_by_seed.png, id=200, 505.89pt x 325.215pt>
 File: fig_er_threshold_ratio_by_seed.png Graphic file (type png)
 <use fig_er_threshold_ratio_by_seed.png>
 Package pdftex.def Info: fig_er_threshold_ratio_by_seed.png  used on input line
  267.
-(pdftex.def)             Requested size: 452.9679pt x 202.71907pt.
+(pdftex.def)             Requested size: 452.9679pt x 291.19711pt.
 <fig_er_extinct_median_vs_beta_by_seed.png, id=201, 1120.185pt x 361.80168pt>
 File: fig_er_extinct_median_vs_beta_by_seed.png Graphic file (type png)
 <use fig_er_extinct_median_vs_beta_by_seed.png>
@@ -495,9 +495,9 @@ File: fig_er_prevalence_trajectory.png Graphic file (type png)
 Package pdftex.def Info: fig_er_prevalence_trajectory.png  used on input line 2
 91.
 (pdftex.def)             Requested size: 371.43698pt x 208.93086pt.
- [10 <./fig_er_median_extinct_tick.png> <./fig_er_threshold_ratio_by_seed.png>]
- [11 <./fig_er_extinct_median_vs_beta_by_seed.png> <./fig_er_extinct_tick_violi
-n_by_beta.png>] [12 <./fig_er_prevalence_trajectory.png>] [13] [14]
+ [10 <./fig_er_median_extinct_tick.png>] [11 <./fig_er_threshold_ratio_by_seed.
+png> <./fig_er_extinct_median_vs_beta_by_seed.png>] [12 <./fig_er_extinct_tick_
+violin_by_beta.png> <./fig_er_prevalence_trajectory.png>] [13] [14]
 Underfull \hbox (badness 10000) in paragraph at lines 375--376
 []\OT1/cmr/bx/n/10.95 Key con-trolled set-tings (re-ported be-low)\OT1/cmr/m/n/
 10.95 : net-work spec-i-fi-ca-tion
@@ -622,7 +622,7 @@ cmsy8.pfb><C:/Program Files/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmti10.pf
 b><C:/Program Files/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmti9.pfb><C:/Pro
 gram Files/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmtt10.pfb><C:/Program Fil
 es/MiKTeX 2.9/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on report.pdf (17 pages, 876847 bytes).
+Output written on report.pdf (17 pages, 910914 bytes).
 PDF statistics:
  360 PDF objects out of 1000 (max. 8388607)
  88 named destinations out of 1000 (max. 500000)
