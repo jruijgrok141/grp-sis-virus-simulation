@@ -7,7 +7,7 @@
   Tang et al. (2025) grp-SIS: exponential, power law, lognormal recovery (Sec. 2.3).
 
   Headless runs (scripts/run_pipeline.py) use experiments embedded in virus_simulation.nlogox,
-  not this file as --setup-file (NetLogo 7.0.3 headless then throws NoSuchElementException).
+  not this file as the setup file path (NetLogo 7.0.3 headless then throws NoSuchElementException).
   After editing here, merge the <experiments> block into the .nlogox without comments that
   contain two consecutive hyphens.
 -->
@@ -27,23 +27,18 @@ export-network-edges (word "../output/edges/edges_" safe-net-label "_" expt-seed
       <metric>bs-out-mean-degree</metric>
     </metrics>
     <constants>
+      <!-- ER-only export for the main study: one $N=2000$ draw per expt-seed (see experiments 05–07). -->
       <enumeratedValueSet variable="interconnection-structure">
-        <value value="&quot;Lattice4&quot;"/>
-        <value value="&quot;Ring&quot;"/>
-        <!-- For complex random graphs (ER / WS / BA) use interconnection-structure = \"other\" -->
         <value value="&quot;other&quot;"/>
       </enumeratedValueSet>
-      <!-- Align ER export with baseline experiments (edges_ER_10001.csv ↔ lambda_max). -->
       <enumeratedValueSet variable="expt-seed">
         <value value="10001"/>
+        <value value="10002"/>
+        <value value="10003"/>
       </enumeratedValueSet>
       <enumeratedValueSet variable="num-nodes">
-        <!-- legacy small networks + baseline ER size -->
-        <value value="200"/>
         <value value="2000"/>
       </enumeratedValueSet>
-      <!-- For interconnection-structure = \"other\", pick an explicit random graph type.
-           safe-net-label maps \"Erdos-Renyi (random)\" to net_label = ER. -->
       <enumeratedValueSet variable="network-type">
         <value value="&quot;Erdos-Renyi (random)&quot;"/>
       </enumeratedValueSet>
@@ -228,9 +223,11 @@ setup</setup>
       <enumeratedValueSet variable="network-type">
         <value value="&quot;Erdos-Renyi (random)&quot;"/>
       </enumeratedValueSet>
-      <!-- Same graph realization across recovery regimes (cf. proposal); process noise via repetitions. -->
+      <!-- Independent ER draws: same seeds 10001–10003 as in 01-export-networks (edges_ER_*.csv). -->
       <enumeratedValueSet variable="expt-seed">
         <value value="10001"/>
+        <value value="10002"/>
+        <value value="10003"/>
       </enumeratedValueSet>
       <enumeratedValueSet variable="num-nodes">
         <value value="2000"/>
@@ -281,6 +278,8 @@ setup</setup>
       </enumeratedValueSet>
       <enumeratedValueSet variable="expt-seed">
         <value value="10001"/>
+        <value value="10002"/>
+        <value value="10003"/>
       </enumeratedValueSet>
       <enumeratedValueSet variable="num-nodes">
         <value value="2000"/>
@@ -332,6 +331,8 @@ setup</setup>
       </enumeratedValueSet>
       <enumeratedValueSet variable="expt-seed">
         <value value="10001"/>
+        <value value="10002"/>
+        <value value="10003"/>
       </enumeratedValueSet>
       <enumeratedValueSet variable="num-nodes">
         <value value="2000"/>
@@ -357,9 +358,7 @@ setup</setup>
       <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"/>
     </constants>
   </experiment>
-  <!-- Per-tick grp-SIS vs classical mean-field SIS (same ODE as update-mean-field-SIS in-code).
-       Run headless: python scripts/run_pipeline.py --experiment 08-dynamics-trajectory-ER
-       Not part of --all (large CSV); for plots see notebooks/virus_dynamics_prevalence.ipynb -->
+  <!-- Per-tick grp-SIS vs classical mean-field SIS (included in default ER pipeline; large CSV). -->
   <experiment name="08-dynamics-trajectory-ER" repetitions="5" sequentialRunOrder="true" runMetricsEveryStep="true">
     <setup>set bs-collect-metrics? false
 set bs-prev-samples []

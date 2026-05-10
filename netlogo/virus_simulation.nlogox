@@ -390,10 +390,10 @@ to-report preferential-attachment-target
   report last candidates ;; fallback
 end
 
-;; distribute nodes uniformly over the patch plane (instead of spring-layout edge clustering)
+;; willekeurig gelijkmatig over het patch-vlak (i.p.v. spring → rand-concentratie)
 to scatter-nodes-uniform
   if not any? turtles [ stop ]
-  ;; keep a tiny margin to avoid clipping the dot while using the full patch plane
+  ;; kleine rand alleen tegen afsnijden van de dot; verder het hele patch-vlak vullen
   let margin-frac 0.005
   let x-span (max-pxcor - min-pxcor)
   let y-span (max-pycor - min-pycor)
@@ -726,6 +726,24 @@ to-report bs-out-mean-degree
   report mean [degree] of turtles
 end
 
+;; Per-step trajectory metrics (experiment 08-dynamics-trajectory-ER)
+to-report bs-out-prev-grp
+  let total-non-immune (num-susceptible + num-infected)
+  report ifelse-value (total-non-immune = 0) [0] [num-infected / total-non-immune]
+end
+
+to-report bs-out-prev-mf
+  report rho-I-mf
+end
+
+to-report bs-out-count-S
+  report num-susceptible
+end
+
+to-report bs-out-count-I
+  report num-infected
+end
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; INTERACTIVE HELPERS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -822,101 +840,41 @@ end
     <slider x="15" step="1" y="160" max="3000" width="155" display="num-nodes" height="50" min="2" direction="Horizontal" default="2000.0" variable="num-nodes"></slider>
     <input x="440" multiline="false" y="675" height="60" variable="max-ticks" type="string" width="565">500</input>
   </widgets>
-  <info>WHAT IS IT?
-This model simulates virus propagation on networks using grp-SIS dynamics.
-States are susceptible (S), infected (I), and susceptible again after recovery.
+  <info>## WHAT IS IT?
 
-The model combines:
-1) a micro-level agent-based simulation on an explicit network, and
-2) a classical mean-field SIS approach as a reference curve.
+(a general understanding of what the model is trying to show or explain)
 
-This helps you observe how network structure, immunization, and the shape of the recovery-time distribution influence prevalence.
+## HOW IT WORKS
 
-HOW IT WORKS
-Each run proceeds as follows.
+(what rules the agents use to create the overall behavior of the model)
 
-1) Setup
-Create num-nodes agents.
-Build a network based on interconnection-structure and, when applicable, network-type.
-Compute node degrees.
-Apply immunization (none, random, or high-degree first).
-Infect initial-infected random susceptible nodes.
+## HOW TO USE IT
 
-2) Per-tick dynamics
-Each infected node tries to infect susceptible neighbors with probability infection-prob.
-At infection, each node receives an individual recovery-deadline drawn from recovery-distribution.
-Once infection-time reaches recovery-deadline, the node becomes susceptible again (SIS).
+(how to use the model, including a description of each of the items in the Interface tab)
 
-3) Measurements
-Monitors show counts of susceptible, infected, immune, and cumulative recoveries.
-The "Prevalence: grp-SIS vs mean-field" plot compares microsimulation prevalence with rho-I-mf.
-The "Recovery time distribution" plot shows a histogram of sampled recovery times.
+## THINGS TO NOTICE
 
-HOW TO USE
-Recommended workflow:
+(suggested things for the user to notice while running the model)
 
-1) Choose the network setup.
-Set interconnection-structure to All vs. All, Lattice4, Lattice8, Ring, or other.
-Set network-type when interconnection-structure is other.
-Set num-nodes for the number of agents.
-Set avg-degree for the target average degree in random networks.
-Set rewiring-prob for Watts-Strogatz runs.
+## THINGS TO TRY
 
-2) Choose epidemiological parameters.
-Set initial-infected for the initial number of infected nodes.
-Set infection-prob for transmission probability per infectious contact per tick.
-Set recovery-distribution for the shape of the recovery-time distribution.
-Set recovery-mean for the mean recovery time.
-Set power-law-lambda, lognormal-sigma, gamma-shape, and weibull-shape for distribution-specific shape parameters.
-Set max-ticks for the maximum simulation duration.
+(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
 
-3) Choose immunization settings.
-Set immunization-strategy to none, random, or high-degree first.
-Set immunized-fraction to control the fraction immunized before the run starts.
+## EXTENDING THE MODEL
 
-4) Start the simulation.
-Click setup.
-Click go (forever button) to run continuously.
+(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
 
-THINGS TO NOTICE
-Threshold behavior around tau-sim (infection-prob times recovery-mean).
-Differences between network types with similar average degree.
-The effect of heavy-tailed recovery times on long-run prevalence.
-Effectiveness of high-degree immunization versus random immunization.
-Deviations between microsimulation and mean-field curves for non-homogeneous networks.
+## NETLOGO FEATURES
 
-THINGS TO TRY
-Keep avg-degree fixed and compare Ring, Lattice4, and Erdos-Renyi.
-Keep recovery-mean fixed and vary only recovery-distribution.
-Sweep infection-prob around the critical region and track extinction versus endemic outcomes.
-Compare no immunization, random immunization, and high-degree-first immunization at the same immunized-fraction.
-Increase num-nodes and check whether threshold behavior becomes more stable.
+(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
 
-EXTENDING THE MODEL
-Add weighted or directed links.
-Add dynamic networks where links can appear and disappear over time.
-Extend to SIR or SEIR with explicit recovered or exposed states.
-Make infection probability depend on node properties or degree.
-Add interventions such as temporary isolation, contact reduction, or time-dependent immunization.
-Export full per-run time series for external analysis.
+## RELATED MODELS
 
-NETLOGO FEATURES
-Uses individual turtle variables (infection-time, recovery-deadline, degree).
-Supports multiple network topologies in one codebase.
-Uses custom reporters for BehaviorSpace output, including late-window prevalence.
-Stores sampled recovery times in recovery-times and visualizes them as a histogram.
-Compares agent-level dynamics with a macro mean-field trajectory in the same model.
+(models in the NetLogo Models Library and elsewhere which are of related interest)
 
-RELATED MODELS
-Related models in the NetLogo Models Library include Virus on a Network, Small Worlds, and epidemic-style compartment models.
-These models are useful references for network structure, epidemic thresholds, and visualization choices.
+## CREDITS AND REFERENCES
 
-CREDITS AND REFERENCES
-Model basis and theoretical inspiration:
-IntechOpen (2025), Simulation of Virus Propagation in Complex Networks Using NetLogo Multiagent Testbed.
-Tang et al., SIS epidemic modelling on homogeneous networked systems with a general recovering process and a mean-field perspective.
-
-Implementation: NetLogo 7.0.3 model file virus_simulation.nlogox.
+(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
 </info>
   <turtleShapes>
     <shape name="default" rotatable="true" editableColorIndex="0">
@@ -1769,15 +1727,14 @@ export-network-edges (word "../output/edges/edges_" safe-net-label "_" expt-seed
       </metrics>
       <constants>
         <enumeratedValueSet variable="interconnection-structure">
-          <value value="&quot;Lattice4&quot;"></value>
-          <value value="&quot;Ring&quot;"></value>
           <value value="&quot;other&quot;"></value>
         </enumeratedValueSet>
         <enumeratedValueSet variable="expt-seed">
           <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
         </enumeratedValueSet>
         <enumeratedValueSet variable="num-nodes">
-          <value value="200"></value>
           <value value="2000"></value>
         </enumeratedValueSet>
         <enumeratedValueSet variable="network-type">
@@ -1965,6 +1922,8 @@ setup</setup>
         </enumeratedValueSet>
         <enumeratedValueSet variable="expt-seed">
           <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
         </enumeratedValueSet>
         <enumeratedValueSet variable="num-nodes">
           <value value="2000"></value>
@@ -2013,6 +1972,8 @@ setup</setup>
         </enumeratedValueSet>
         <enumeratedValueSet variable="expt-seed">
           <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
         </enumeratedValueSet>
         <enumeratedValueSet variable="num-nodes">
           <value value="2000"></value>
@@ -2064,6 +2025,8 @@ setup</setup>
         </enumeratedValueSet>
         <enumeratedValueSet variable="expt-seed">
           <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
         </enumeratedValueSet>
         <enumeratedValueSet variable="num-nodes">
           <value value="2000"></value>
@@ -2087,6 +2050,55 @@ setup</setup>
           <value value="&quot;10000&quot;"></value>
         </enumeratedValueSet>
         <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"></steppedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="08-dynamics-trajectory-ER" repetitions="5" sequentialRunOrder="true" runMetricsEveryStep="true">
+      <setup>set bs-collect-metrics? false
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "exponential"
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-prev-grp</metric>
+        <metric>bs-out-prev-mf</metric>
+        <metric>bs-out-count-S</metric>
+        <metric>bs-out-count-I</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;other&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="network-type">
+          <value value="&quot;Erdos-Renyi (random)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="10001"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="2000"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;2000&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="infection-prob">
+          <value value="0.028"></value>
+        </enumeratedValueSet>
       </constants>
     </experiment>
   </experiments>
