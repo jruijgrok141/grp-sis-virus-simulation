@@ -7,11 +7,11 @@
 \BOOKMARK [2][-]{subsection.32}{Robustness across ER draws and extinction conditioning on beta}{section.21}% 7
 \BOOKMARK [2][-]{subsection.39}{Microscopic vs. mean-field prevalence}{section.21}% 8
 \BOOKMARK [1][-]{section.42}{Discussion}{}% 9
-\BOOKMARK [1][-]{section.47}{Conclusion}{}% 10
-\BOOKMARK [1][-]{section*.49}{Data and code availability}{}% 11
-\BOOKMARK [1][-]{appendix.51}{BehaviorSpace experiment configurations \(NetLogo\)}{}% 12
-\BOOKMARK [2][-]{subsection.52}{Common elements}{appendix.51}% 13
-\BOOKMARK [2][-]{subsection.53}{Experiment 01: network export}{appendix.51}% 14
-\BOOKMARK [2][-]{subsection.55}{Experiments 02\20504: optional coarse sweeps on regular structures}{appendix.51}% 15
-\BOOKMARK [2][-]{subsection.59}{Experiments 05\20507: ER baseline experiments \(main results\)}{appendix.51}% 16
-\BOOKMARK [2][-]{subsection.63}{Experiment 08: prevalence trajectories \(grp-SIS vs mean-field\)}{appendix.51}% 17
+\BOOKMARK [1][-]{section.48}{Conclusion}{}% 10
+\BOOKMARK [1][-]{section*.50}{Data and code availability}{}% 11
+\BOOKMARK [1][-]{appendix.52}{BehaviorSpace experiment configurations \(NetLogo\)}{}% 12
+\BOOKMARK [2][-]{subsection.53}{Common elements}{appendix.52}% 13
+\BOOKMARK [2][-]{subsection.54}{Experiment 01: network export}{appendix.52}% 14
+\BOOKMARK [2][-]{subsection.56}{Experiments 02\20504: optional coarse sweeps on regular structures}{appendix.52}% 15
+\BOOKMARK [2][-]{subsection.60}{Experiments 05\20507: ER baseline experiments \(main results\)}{appendix.52}% 16
+\BOOKMARK [2][-]{subsection.64}{Experiment 08: prevalence trajectories \(grp-SIS vs mean-field\)}{appendix.52}% 17
