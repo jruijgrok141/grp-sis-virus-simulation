@@ -64,7 +64,7 @@ to setup
   set expt-seed rs
   set max-ticks mt
 
-  set bs-collect-metrics? false
+  ;; bs-collect-metrics? is set in BehaviorSpace experiment setup before setup runs
   set bs-prev-samples []
   set late-window-len 200
   set sim-tick-limit read-from-string max-ticks
@@ -2052,12 +2052,11 @@ setup</setup>
         <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"></steppedValueSet>
       </constants>
     </experiment>
-    <experiment name="08-dynamics-trajectory-ER" repetitions="5" sequentialRunOrder="true" runMetricsEveryStep="true">
+    <experiment name="08-dynamics-trajectory-ER" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="true">
       <setup>set bs-collect-metrics? false
 set bs-prev-samples []
 set immunization-strategy "none"
 set immunized-fraction 0
-set recovery-distribution "exponential"
 setup</setup>
       <go>go</go>
       <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
@@ -2093,11 +2092,24 @@ setup</setup>
         <enumeratedValueSet variable="recovery-mean">
           <value value="5"></value>
         </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-distribution">
+          <value value="&quot;exponential&quot;"></value>
+          <value value="&quot;power law (Tang)&quot;"></value>
+          <value value="&quot;lognormal (Tang)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="power-law-lambda">
+          <value value="4.24"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="lognormal-sigma">
+          <value value="1"></value>
+        </enumeratedValueSet>
         <enumeratedValueSet variable="max-ticks">
-          <value value="&quot;2000&quot;"></value>
+          <value value="&quot;10000&quot;"></value>
         </enumeratedValueSet>
         <enumeratedValueSet variable="infection-prob">
+          <value value="0.026"></value>
           <value value="0.028"></value>
+          <value value="0.036"></value>
         </enumeratedValueSet>
       </constants>
     </experiment>

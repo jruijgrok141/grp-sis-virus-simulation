@@ -218,6 +218,24 @@ BehaviorSpace experiments \texttt{05}--\texttt{07} sweep $\beta$ from $0.018$ to
   \label{fig:survival}
 \end{figure}
 
+Figure~\ref{fig:survival-tau} shows the same survival estimates against $\tau=\beta\,\mathbb{E}[W]$ with $\tau_{\mathrm{pred}}=1/\lambda_{\max}$ (\textbf{RQ1}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{fig_er_survival_vs_tau.png}
+  \caption{ER seed \RepPrimarySeed: fraction surviving vs.\ $\tau=\beta\,\mathbb{E}[W]$ ($\mathbb{E}[W]{=}5$ ticks). Dashed vertical line: $\tau_{\mathrm{pred}}$; dotted horizontal: 50\% survival.}
+  \label{fig:survival-tau}
+\end{figure}
+
+Figure~\ref{fig:late-prev} complements the survival curves with \texttt{bs-out-late-mean-prevalence} on runs that are not extinct at the horizon (proposal: persistence / late-window prevalence vs.\ $\beta$). This separates \textbf{RQ2} threshold shifts from \textbf{RQ3} variability in endemic levels among persisting runs. Values require a fresh export of experiments~\texttt{05}--\texttt{07} after the NetLogo fix that preserves \texttt{bs-collect-metrics?} through \texttt{setup}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{fig_er_late_prevalence_vs_beta.png}
+  \caption{ER seed \RepPrimarySeed: median late-window prevalence vs.\ $\beta$ among surviving replicates (IQR error bars). Dashed vertical line: $\beta_{\mathrm{pred}}$.}
+  \label{fig:late-prev}
+\end{figure}
+
 Table~\ref{tab:thresholds} summarises $\hat{\beta}_{\mathrm{surv}\,50}$, bootstrap uncertainty, and $\hat{\beta}/\beta_{\mathrm{pred}}$ from \path{output/empirical_thresholds.csv} (primary seed~\RepPrimarySeed). Exponential and lognormal estimates in this run set sit at the largest $\beta$ on the grid ($\RepBetaGridMax$): the survival curve crosses $50\%$ at or beyond the last point, so $\hat{\beta}_{\mathrm{surv}\,50}$ is \emph{right-censored} (ratios $\RepThExpRatio$ and $\RepThLognRatio$). Where the estimator sits on the boundary, the bootstrap interval often collapses to a point (Table~\ref{tab:thresholds}, footnote). Tang power-law recovery yields a lower crossing at $\hat{\beta}_{\mathrm{surv}\,50}=\RepThPLHat{}$ ($\approx \RepThPLRatio\,\beta_{\mathrm{pred}}$), the regime for which the $50\%$ point lies strictly inside the grid here.
 
 \begin{table}[htbp]
@@ -284,7 +302,14 @@ After running experiment~\texttt{01} with the same seed list, each draw has its 
 \end{figure}
 
 \subsection{Microscopic vs.\ mean-field prevalence}
-Experiment \texttt{08-dynamics-trajectory-ER} records per-tick microscopic prevalence (grp-SIS) and the homogeneous mean-field SIS prevalence updated in the same model. Figure~\ref{fig:traj} shows a single replicate: the two trajectories track closely, while stochastic extinction can end the microscopic run early (exit when no infected remain).
+Experiment \texttt{08-dynamics-trajectory-ER} records per-tick microscopic prevalence (grp-SIS) and the homogeneous mean-field SIS prevalence updated in the same model. Figure~\ref{fig:traj-bands} averages microscopic trajectories over replicates at three $\beta$ values near $\beta_{\mathrm{pred}}$ (low / near / high on the sweep grid), with $95\%$ bands, addressing \textbf{RQ3} (transients and run-to-run variability); the dotted mean-field curve (middle $\beta$, one replicate) checks that the in-model ODE tracks the micro state when extinction does not intervene early. Figure~\ref{fig:traj} shows one illustrative replicate at the same experiment settings.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{fig_er_prevalence_trajectory_bands.png}
+  \caption{Experiment \texttt{08}: mean microscopic prevalence $\pm$ $95\%$ band over replicates ($24$ per cell), three recovery laws (columns) and $\beta$ levels (line styles). Regenerate after \texttt{run\_pipeline.py --experiment 08-dynamics-trajectory-ER}.}
+  \label{fig:traj-bands}
+\end{figure}
 
 \begin{figure}[htbp]
   \centering
@@ -297,10 +322,10 @@ Experiment \texttt{08-dynamics-trajectory-ER} records per-tick microscopic preva
 \label{sec:discussion}
 
 \paragraph{Spectral benchmark vs.\ ABM survival (RQ1).}
-The empirical $\hat{\beta}_{\mathrm{surv}\,50}$ lies clearly above $\beta_{\mathrm{pred}}$: in $\tau$-space, $\hat{\tau}_{50}=\hat{\beta}_{\mathrm{surv}\,50}\mathbb{E}[W]$ corresponds to an effective multiplier $c\approx \hat{\tau}_{50}\,\lambda_{\max}$ of about $\RepCeffMin$--$\RepCeffMax$ on our grid (seed~\RepPrimarySeed), not $c{=}1$. So the mean-field spectral line is best read as a \emph{scale} or optimistic bound, not a sharp critical value, for this discrete-time, finite-$N$, agent-based grp-SIS implementation. Finite-size effects, discretisation, and spatial correlations beyond mean field are the usual explanations; the trajectory check (Figure~\ref{fig:traj}) shows that the \emph{homogeneous} mean-field equation itself matches the simulation when both are defined on the same state variables, so the gap in Table~\ref{tab:thresholds} is about \emph{where survival becomes likely} in the stochastic model, not about a coding inconsistency between ODE and micro-dynamics.
+The empirical $\hat{\beta}_{\mathrm{surv}\,50}$ lies clearly above $\beta_{\mathrm{pred}}$: in $\tau$-space, $\hat{\tau}_{50}=\hat{\beta}_{\mathrm{surv}\,50}\mathbb{E}[W]$ corresponds to an effective multiplier $c\approx \hat{\tau}_{50}\,\lambda_{\max}$ of about $\RepCeffMin$--$\RepCeffMax$ on our grid (seed~\RepPrimarySeed), not $c{=}1$. So the mean-field spectral line is best read as a \emph{scale} or optimistic bound, not a sharp critical value, for this discrete-time, finite-$N$, agent-based grp-SIS implementation. Finite-size effects, discretisation, and spatial correlations beyond mean field are the usual explanations; the trajectory checks (Figures~\ref{fig:traj-bands}--\ref{fig:traj}) show that the \emph{homogeneous} mean-field equation itself matches the simulation when both are defined on the same state variables, so the gap in Table~\ref{tab:thresholds} is about \emph{where survival becomes likely} in the stochastic model, not about a coding inconsistency between ODE and micro-dynamics.
 
 \paragraph{Recovery shape (RQ2) and dynamics (RQ3).}
-The original hypothesis emphasised easier persistence under heavy tails at fixed $\mathbb{E}[W]$. On this ER instance and $\beta$ grid, we do not see a uniform lowering of $\hat{\beta}_{\mathrm{surv}\,50}$ for \emph{both} heavy-tailed regimes: lognormal matches exponential at the grid cap, while power-law recovery crosses $50\%$ at a slightly lower $\beta$. Thus RQ2 receives a nuanced answer---possible ordering effects between specific heavy-tailed laws rather than a single ``heavy tail'' shift. For RQ3, the median extinction-time summary (Figure~\ref{fig:extinct-med}) supports the view that recovery shape reshapes \emph{transient} and extinction behaviour more visibly than a shared spectral $\beta_{\mathrm{pred}}$ might suggest: Tang power-law recovery is associated with longer extinction times in the pipeline summary. A fuller answer would examine extinction-time \emph{distributions} by $\beta$ (not only the aggregated median) and persistence of late-window prevalence.
+The original hypothesis emphasised easier persistence under heavy tails at fixed $\mathbb{E}[W]$. On this ER instance and $\beta$ grid, we do not see a uniform lowering of $\hat{\beta}_{\mathrm{surv}\,50}$ for \emph{both} heavy-tailed regimes: lognormal matches exponential at the grid cap, while power-law recovery crosses $50\%$ at a slightly lower $\beta$. Thus RQ2 receives a nuanced answer---possible ordering effects between specific heavy-tailed laws rather than a single ``heavy tail'' shift. For RQ3, the median extinction-time summary (Figure~\ref{fig:extinct-med}) supports the view that recovery shape reshapes \emph{transient} and extinction behaviour more visibly than a shared spectral $\beta_{\mathrm{pred}}$ might suggest: Tang power-law recovery is associated with longer extinction times in the pipeline summary. Figures~\ref{fig:extinct-violin} and~\ref{fig:late-prev} examine extinction-time distributions by $\beta$ and late-window prevalence among surviving runs, respectively.
 
 \paragraph{Contact topology (Erd\H{o}s--R\'enyi).}
 \label{par:er-topology}
@@ -451,13 +476,13 @@ This appendix documents the NetLogo BehaviorSpace experiments as defined in \pat
 \subsection{Experiment 08: prevalence trajectories (grp-SIS vs mean-field)}
 \paragraph{\texttt{08-dynamics-trajectory-ER}}
 \begin{itemize}[leftmargin=*]
-  \item \textbf{Purpose}: export per-tick prevalence for the microscopic grp-SIS simulation and the in-model homogeneous mean-field SIS curve for the same parameters (part of the default ER pipeline together with \texttt{01} and \texttt{05}--\texttt{07}).
-  \item \textbf{Repetitions}: 5.
-  \item \textbf{RunMetricsEveryStep}: \texttt{true} (per-tick table export).
+  \item \textbf{Purpose}: export per-tick prevalence for the microscopic grp-SIS simulation and the in-model homogeneous mean-field SIS curve (Figure~\ref{fig:traj-bands}, \textbf{RQ3}).
+  \item \textbf{Repetitions}: 24 per $(\beta,\text{recovery law})$ cell.
+  \item \textbf{RunMetricsEveryStep}: \texttt{true} (per-tick table export; large CSV).
   \item \textbf{Network and initial condition}: ER baseline with \texttt{expt-seed}$=$10001; \texttt{num-nodes}$=$2000; \texttt{avg-degree}$=$6; \texttt{initial-infected}$=$5.
-  \item \textbf{Recovery law}: \texttt{"exponential"} with \texttt{recovery-mean}$=$5.
-  \item \textbf{Horizon}: \texttt{max-ticks}$=$2000.
-  \item \textbf{Infection strength}: \texttt{infection-prob}$=$0.028 (single value).
+  \item \textbf{Recovery laws}: exponential, power law (Tang, \texttt{power-law-lambda}$=$4.24), lognormal (Tang, \texttt{lognormal-sigma}$=$1); \texttt{recovery-mean}$=$5.
+  \item \textbf{Horizon}: \texttt{max-ticks}$=$10000 (aligned with experiments~\texttt{05}--\texttt{07}).
+  \item \textbf{Infection strength}: \texttt{infection-prob} $\in\{0.026,0.028,0.036\}$ (grid values near $0.9\,\beta_{\mathrm{pred}}$, $\beta_{\mathrm{pred}}$, $1.3\,\beta_{\mathrm{pred}}$).
   \item \textbf{Metrics}: \texttt{bs-out-prev-grp}, \texttt{bs-out-prev-mf}, \texttt{bs-out-count-S}, \texttt{bs-out-count-I}, \texttt{bs-out-mean-degree}.
 \end{itemize}
 

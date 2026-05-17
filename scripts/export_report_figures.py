@@ -52,6 +52,11 @@ REGIME_ORDER = [
     ("lognormal (Tang)", "Lognormal (Tang)", "C2"),
 ]
 
+THRESHOLD_EXPERIMENTS = [
+    (T05, "exponential", "Exponential", "C0"),
+    (T06, "power law (Tang)", "Power law (Tang)", "C1"),
+    (T07, "lognormal (Tang)", "Lognormal (Tang)", "C2"),
+]
 
 def _cols(df: pd.DataFrame) -> tuple[str, str, str, str]:
     ic = "infection_prob" if "infection_prob" in df.columns else None
@@ -84,14 +89,344 @@ def _edges_er_path(seed: int) -> Path:
     return EDGES_DIR / f"edges_ER_{int(seed)}.csv"
 
 
-def plot_survival_curves(beta_pred: float, out_path: Path, *, primary_seed: int = PRIMARY_ER_SEED) -> None:
-    sets = [
+def _beta_grid_from_threshold_tables(primary_seed: int = PRIMARY_ER_SEED) -> np.ndarray:
+    """Sorted infection-prob values shared across experiments 05--07."""
+    betas: set[float] = set()
+    for path, *_ in THRESHOLD_EXPERIMENTS:
+        if not path.is_file():
+            continue
+        df = _filter_seed(read_behaviorspace_table(path), primary_seed)
+        ic = pick_column(df, "infection_prob", "infection-prob")
+        if ic is None or df.empty:
+            continue
+        for v in pd.to_numeric(df[ic], errors="coerce").dropna().unique():
+            betas.add(float(v))
+    if not betas:
+        return np.array([0.026, 0.028, 0.036])
+    return np.sort(list(betas))
+
+
+def _snap_to_grid(target: float, grid: np.ndarray) -> float:
+    if grid.size == 0:
+        return float(target)
+    return float(grid[np.argmin(np.abs(grid - float(target)))])
+
+
+def trajectory_betas_near_pred(
+    beta_pred: float,
+    grid: np.ndarray | None = None,
+) -> tuple[float, float, float]:
+    """Three grid values near 0.9, 1.0, 1.3 x beta_pred (for experiment 08 / F9)."""
+    g = grid if grid is not None and len(grid) else _beta_grid_from_threshold_tables()
+    return (
+        _snap_to_grid(0.9 * beta_pred, g),
+        _snap_to_grid(beta_pred, g),
+        _snap_to_grid(1.3 * beta_pred, g),
+    )
+
+
+def _late_prevalence_summary(
+    df: pd.DataFrame,
+    ic: str,
+    ec: str,
+    pc: str,
+    *,
+    survivors_only: bool,
+) -> pd.DataFrame:
+    rows: list[dict[str, float | int]] = []
+    for beta, g in df.groupby(ic, dropna=False):
+        beta_f = float(beta)
+        if survivors_only:
+            g = g.loc[g[ec].astype(float) < 0.5]
+        prev = pd.to_numeric(g[pc], errors="coerce").dropna().to_numpy()
+        rows.append(
+            {
+                ic: beta_f,
+                "median": float(np.median(prev)) if len(prev) else float("nan"),
+                "q25": float(np.percentile(prev, 25)) if len(prev) else float("nan"),
+                "q75": float(np.percentile(prev, 75)) if len(prev) else float("nan"),
+                "n": int(len(prev)),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(ic).reset_index(drop=True)
+
+
+def plot_late_prevalence_vs_beta(
+    beta_pred: float,
+    out_path: Path,
+    *,
+    primary_seed: int = PRIMARY_ER_SEED,
+    survivors_only: bool = True,
+) -> None:
+    """
+    F6 (RQ2--RQ3): late-window mean prevalence vs beta from experiments 05--07.
+
+    Uses ``bs-out-late-mean-prevalence``; by default only non-extinct runs at the horizon.
+    Re-run 05--07 after the NetLogo ``bs-collect-metrics?`` setup fix for non-zero values.
+    """
+    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+    any_data = False
+    for path, _regime_key, label, color in THRESHOLD_EXPERIMENTS:
+        if not path.is_file():
+            continue
+        df = read_behaviorspace_table(path)
+        df = _filter_seed(df, primary_seed)
+        if df.empty:
+            continue
+        ic, ec, pc, _tc = _cols(df)
+        if pc == ic:
+            continue
+        cur = _late_prevalence_summary(df, ic, ec, pc, survivors_only=survivors_only)
+        cur = cur[np.isfinite(cur["median"])]
+        if cur.empty:
+            continue
+        any_data = True
+        ax.plot(cur[ic], cur["median"], "o-", ms=4, lw=1.5, color=color, label=label)
+        yerr = np.vstack(
+            [
+                cur["median"].to_numpy() - cur["q25"].to_numpy(),
+                cur["q75"].to_numpy() - cur["median"].to_numpy(),
+            ]
+        )
+        ax.errorbar(
+            cur[ic],
+            cur["median"],
+            yerr=yerr,
+            fmt="none",
+            ecolor=color,
+            alpha=0.45,
+            capsize=2,
+        )
+    if not any_data:
+        _write_placeholder_figure(
+            out_path,
+            "No late-prevalence data in output/raw/05--07.\nRun BehaviorSpace experiments 05--07 first.",
+        )
+        return
+    ax.axvline(beta_pred, color="0.35", ls="--", lw=1.2, label=r"$\beta_{\mathrm{pred}}$")
+    ylab = (
+        r"Late-window mean prevalence $\bar{\rho}_{\mathrm{late}}$ (surviving runs)"
+        if survivors_only
+        else r"Late-window mean prevalence $\bar{\rho}_{\mathrm{late}}$ (all runs)"
+    )
+    ax.set_xlabel(r"Infection probability $\beta$")
+    ax.set_ylabel(ylab)
+    ax.set_title(
+        f"ER seed {primary_seed}: late prevalence vs $\\beta$ "
+        f"({'non-extinct at horizon' if survivors_only else 'all replicates'})"
+    )
+    ax.set_ylim(bottom=0)
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def _trajectory_envelope(
+    df: pd.DataFrame,
+    *,
+    step_col: str,
+    prev_col: str,
+    run_col: str,
+    ic: str,
+    beta: float,
+    rd_col: str | None,
+    regime_key: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    sub = df.loc[(pd.to_numeric(df[ic], errors="coerce") - beta).abs() < 1e-9].copy()
+    if rd_col is not None and rd_col in sub.columns:
+        sub = sub.loc[sub[rd_col].astype(str).str.lower() == regime_key.lower()]
+    if sub.empty:
+        return None
+    curves: list[np.ndarray] = []
+    for _, g in sub.groupby(run_col):
+        g2 = g.sort_values(step_col)
+        y = pd.to_numeric(g2[prev_col], errors="coerce").dropna().to_numpy(dtype=float)
+        if len(y) > 0:
+            curves.append(y)
+    if not curves:
+        return None
+    max_len = max(len(c) for c in curves)
+    arr = np.full((len(curves), max_len), np.nan, dtype=float)
+    for i, c in enumerate(curves):
+        arr[i, : len(c)] = c
+    steps = np.arange(max_len, dtype=float)
+    mean = np.nanmean(arr, axis=0)
+    lo = np.nanpercentile(arr, 2.5, axis=0)
+    hi = np.nanpercentile(arr, 97.5, axis=0)
+    return steps, mean, lo, hi
+
+
+def _mean_field_reference_curve(
+    df: pd.DataFrame,
+    *,
+    step_col: str,
+    mf_col: str,
+    run_col: str,
+    ic: str,
+    beta: float,
+    rd_col: str | None,
+    regime_key: str,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    sub = df.loc[(pd.to_numeric(df[ic], errors="coerce") - beta).abs() < 1e-9].copy()
+    if rd_col is not None and rd_col in sub.columns:
+        sub = sub.loc[sub[rd_col].astype(str).str.lower() == regime_key.lower()]
+    if sub.empty:
+        return None
+    best_run = None
+    best_len = 0
+    for _, g in sub.groupby(run_col):
+        g2 = g.sort_values(step_col)
+        if len(g2) > best_len:
+            best_len = len(g2)
+            best_run = g2
+    if best_run is None or best_len == 0:
+        return None
+    steps = pd.to_numeric(best_run[step_col], errors="coerce").to_numpy(dtype=float)
+    mf = pd.to_numeric(best_run[mf_col], errors="coerce").to_numpy(dtype=float)
+    return steps, mf
+
+
+def plot_prevalence_trajectory_bands(
+    out_path: Path,
+    *,
+    primary_seed: int = PRIMARY_ER_SEED,
+    beta_pred: float | None = None,
+    traj_path: Path = T08,
+) -> None:
+    """
+    F9 (RQ3): mean microscopic prevalence +/- 95% band over replicates (experiment 08).
+
+    One column per recovery regime; curves for beta_low, beta_mid, beta_high near beta_pred.
+    """
+    if not traj_path.is_file():
+        _write_placeholder_figure(
+            out_path,
+            "Missing output/raw/08-dynamics-trajectory-ER_table.csv\n"
+            "Run: python scripts/run_pipeline.py --experiment 08-dynamics-trajectory-ER",
+        )
+        return
+    df = read_behaviorspace_table(traj_path)
+    df = _filter_seed(df, primary_seed)
+    step_col = pick_column(df, "step")
+    gcol = pick_column(df, "bs_out_prev_grp", "bs-out-prev-grp")
+    mcol = pick_column(df, "bs_out_prev_mf", "bs-out-prev-mf")
+    run_col = pick_column(df, "run_number", "[run number]")
+    ic = pick_column(df, "infection_prob", "infection-prob")
+    rd_col = pick_column(df, "recovery_distribution", "recovery-distribution")
+    if not all([step_col, gcol, mcol, run_col, ic]) or df.empty:
+        _write_placeholder_figure(out_path, "08-dynamics CSV missing required columns or is empty.")
+        return
+
+    bp = beta_pred if beta_pred is not None else beta_pred_from_lambda_csv(primary_seed)
+    grid = _beta_grid_from_threshold_tables(primary_seed)
+    b_lo, b_mid, b_hi = trajectory_betas_near_pred(bp, grid)
+    beta_specs = [
+        (b_lo, rf"$\beta={b_lo:.3f}$ (low)"),
+        (b_mid, rf"$\beta={b_mid:.3f}$ (near $\beta_{{\mathrm{{pred}}}}$)"),
+        (b_hi, rf"$\beta={b_hi:.3f}$ (high)"),
+    ]
+    line_styles = ["-", "--", "-."]
+
+    regimes_present: list[tuple[str, str, str]] = []
+    if rd_col is not None and rd_col in df.columns:
+        known = {r.lower(): (r, L, c) for r, L, c in REGIME_ORDER}
+        for val in df[rd_col].astype(str).unique():
+            key = val.strip().lower()
+            if key in known:
+                regimes_present.append(known[key])
+    else:
+        regimes_present = [(r, L, c) for r, L, c in REGIME_ORDER[:1]]
+
+    if not regimes_present:
+        _write_placeholder_figure(out_path, "No recovery regimes found in experiment 08 export.")
+        return
+
+    n_reg = len(regimes_present)
+    fig, axes = plt.subplots(1, n_reg, figsize=(5.4 * n_reg, 4.8), sharey=True)
+    if n_reg == 1:
+        axes = [axes]
+
+    any_plotted = False
+    for ax, (regime_key, reg_title, base_color) in zip(axes, regimes_present):
+        for (beta, beta_lbl), ls in zip(beta_specs, line_styles):
+            env = _trajectory_envelope(
+                df,
+                step_col=step_col,
+                prev_col=gcol,
+                run_col=run_col,
+                ic=ic,
+                beta=beta,
+                rd_col=rd_col,
+                regime_key=regime_key,
+            )
+            if env is None:
+                continue
+            steps, mean, lo, hi = env
+            any_plotted = True
+            ax.plot(steps, mean, ls, color=base_color, lw=1.6, label=beta_lbl)
+            ax.fill_between(steps, lo, hi, color=base_color, alpha=0.18, linewidth=0)
+            ref = _mean_field_reference_curve(
+                df,
+                step_col=step_col,
+                mf_col=mcol,
+                run_col=run_col,
+                ic=ic,
+                beta=beta,
+                rd_col=rd_col,
+                regime_key=regime_key,
+            )
+            if ref is not None and beta == b_mid:
+                ax.plot(ref[0], ref[1], ":", color="0.25", lw=1.2, alpha=0.85, label="Mean-field (one run)")
+        ax.set_title(reg_title)
+        ax.set_xlabel("Time step")
+        ax.grid(True, alpha=0.3)
+
+    if not any_plotted:
+        _write_placeholder_figure(
+            out_path,
+            "08-dynamics export has no rows for the expected\n"
+            f"beta in {{{b_lo:.3f}, {b_mid:.3f}, {b_hi:.3f}}} and three recovery laws.\n"
+            "Re-run experiment 08-dynamics-trajectory-ER (updated BehaviorSpace XML).",
+        )
+        return
+
+    axes[0].set_ylabel("Prevalence (fraction infected)")
+    handles, labels = axes[-1].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="upper center", ncol=min(4, len(handles)), fontsize=8, bbox_to_anchor=(0.5, 1.04))
+    fig.suptitle(
+        f"Experiment 08: microscopic grp-SIS prevalence (mean + 95% band, 24 reps), ER seed {primary_seed}",
+        y=1.1,
+    )
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _recovery_mean_ticks() -> float:
+    try:
+        mu, _, _ = load_recovery_calibration_from_bs()
+        return float(mu)
+    except (KeyError, ValueError, OSError):
+        return 5.0
+
+
+def _plot_survival_curves_on_axis(
+    ax: plt.Axes,
+    *,
+    primary_seed: int,
+    x_scale: str,
+    ew: float,
+) -> bool:
+    """Draw survival curves on ``ax``; return False if no data were plotted."""
+    any_data = False
+    for path, label, color in [
         (T05, "Exponential", "C0"),
         (T06, "Power law (Tang)", "C1"),
         (T07, "Lognormal (Tang)", "C2"),
-    ]
-    fig, ax = plt.subplots(figsize=(8.5, 5.0))
-    for path, label, color in sets:
+    ]:
         if not path.is_file():
             continue
         df = read_behaviorspace_table(path)
@@ -100,8 +435,12 @@ def plot_survival_curves(beta_pred: float, out_path: Path, *, primary_seed: int 
             continue
         ic, ec, pc, tc = _cols(df)
         cur = survival_curve(df, ic, ec, prev_col=pc, tick_col=tc)
+        x = pd.to_numeric(cur[ic], errors="coerce").astype(float)
+        if x_scale == "tau":
+            x = x * ew
+        any_data = True
         ax.plot(
-            cur[ic],
+            x,
             cur["p_survive"],
             "o-",
             ms=4,
@@ -109,11 +448,49 @@ def plot_survival_curves(beta_pred: float, out_path: Path, *, primary_seed: int 
             color=color,
             label=label,
         )
+    return any_data
+
+
+def plot_survival_curves(beta_pred: float, out_path: Path, *, primary_seed: int = PRIMARY_ER_SEED) -> None:
+    ew = _recovery_mean_ticks()
+    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+    if not _plot_survival_curves_on_axis(ax, primary_seed=primary_seed, x_scale="beta", ew=ew):
+        _write_placeholder_figure(out_path, "Missing output/raw/05--07 — run BehaviorSpace threshold experiments.")
+        return
     ax.axvline(beta_pred, color="0.35", ls="--", lw=1.2, label=r"$\beta_{\mathrm{pred}}$ (spectral, $c{=}1$)")
     ax.axhline(0.5, color="0.65", ls=":", lw=1.0)
     ax.set_xlabel(r"Infection probability $\beta$")
     ax.set_ylabel("Fraction not extinct at time limit")
     ax.set_title(f"ER expt-seed {primary_seed}: survival vs $\\beta$ (24 replicates per $\\beta$)")
+    ax.set_ylim(-0.02, 1.05)
+    ax.legend(loc="lower right", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def plot_survival_curves_tau(
+    beta_pred: float,
+    out_path: Path,
+    *,
+    primary_seed: int = PRIMARY_ER_SEED,
+) -> None:
+    """F1b (RQ1): same survival curves with $tau = beta * E[W]$ on the horizontal axis."""
+    ew = _recovery_mean_ticks()
+    tau_pred = beta_pred * ew
+    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+    if not _plot_survival_curves_on_axis(ax, primary_seed=primary_seed, x_scale="tau", ew=ew):
+        _write_placeholder_figure(out_path, "Missing output/raw/05--07 — run BehaviorSpace threshold experiments.")
+        return
+    ax.axvline(tau_pred, color="0.35", ls="--", lw=1.2, label=r"$\tau_{\mathrm{pred}}=1/\lambda_{\max}$ ($c{=}1$)")
+    ax.axhline(0.5, color="0.65", ls=":", lw=1.0)
+    ax.set_xlabel(r"Effective transmission $\tau = \beta\,\mathbb{E}[W]$")
+    ax.set_ylabel("Fraction not extinct at time limit")
+    ax.set_title(
+        f"ER expt-seed {primary_seed}: survival vs $\\tau$ "
+        rf"($\mathbb{{E}}[W]={ew:g}$ ticks)"
+    )
     ax.set_ylim(-0.02, 1.05)
     ax.legend(loc="lower right", fontsize=9)
     ax.grid(True, alpha=0.3)
@@ -586,6 +963,18 @@ def main() -> None:
     plot_er_network(REPORT_DIR / "er_network_example.png", seed=primary)
     plot_recovery_pdfs(REPORT_DIR / "fig_recovery_pdfs.png")
     plot_survival_curves(beta_pred, REPORT_DIR / "fig_er_survival_vs_beta.png", primary_seed=primary)
+    plot_survival_curves_tau(beta_pred, REPORT_DIR / "fig_er_survival_vs_tau.png", primary_seed=primary)
+    plot_late_prevalence_vs_beta(
+        beta_pred,
+        REPORT_DIR / "fig_er_late_prevalence_vs_beta.png",
+        primary_seed=primary,
+        survivors_only=True,
+    )
+    plot_prevalence_trajectory_bands(
+        REPORT_DIR / "fig_er_prevalence_trajectory_bands.png",
+        primary_seed=primary,
+        beta_pred=beta_pred,
+    )
     plot_ratio_bar(EMP, beta_pred, REPORT_DIR / "fig_er_threshold_ratio_bar.png", primary_seed=primary)
     plot_median_extinct(EMP, REPORT_DIR / "fig_er_median_extinct_tick.png", primary_seed=primary)
     plot_trajectory(REPORT_DIR / "fig_er_prevalence_trajectory.png")
