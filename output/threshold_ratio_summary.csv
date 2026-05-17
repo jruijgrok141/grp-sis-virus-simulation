@@ -1,0 +1,4 @@
+recovery_regime,net_label,ratio_mean,ratio_std,n_seeds
+exponential,ER,1.7276710238035644,0.008704032868483617,3
+lognormal (Tang),ER,1.7037547419472807,0.04691058634485043,3
+power law (Tang),ER,1.655883887436796,0.07912789973781718,3

@@ -1,0 +1,602 @@
+#!/usr/bin/env python3
+"""
+Build PNG figures for report/report.tex from pipeline outputs under output/.
+
+Usage (from project root):
+  python scripts/export_report_figures.py
+
+Requires: matplotlib, pandas, numpy; optional networkx for the ER schematic (falls back if missing).
+
+Primary ER seed (figures that stay comparable to the original single-graph report): 10001.
+Additional seeds 10002--10003 require a full pipeline run after updating BehaviorSpace experiments.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.analysis_utils import pick_column, read_behaviorspace_table  # noqa: E402
+from scripts.threshold_estimators import survival_curve  # noqa: E402
+
+REPORT_DIR = ROOT / "report"
+BS_XML = ROOT / "netlogo" / "behaviorspace_experiments.xml"
+RAW = ROOT / "output" / "raw"
+EDGES_DIR = ROOT / "output" / "edges"
+LAM = ROOT / "output" / "lambda_max.csv"
+EMP = ROOT / "output" / "empirical_thresholds.csv"
+
+T05 = RAW / "05-baseline-empirical-threshold-ER_table.csv"
+T06 = RAW / "06-baseline-ER-power-law-Tang_table.csv"
+T07 = RAW / "07-baseline-ER-lognormal-Tang_table.csv"
+T08 = RAW / "08-dynamics-trajectory-ER_table.csv"
+
+# Match BehaviorSpace `expt-seed` values in netlogo experiments (01 / 05--07).
+PRIMARY_ER_SEED = 10001
+DEFAULT_ER_SEEDS = (10001, 10002, 10003)
+
+REGIME_ORDER = [
+    ("exponential", "Exponential", "C0"),
+    ("power law (Tang)", "Power law (Tang)", "C1"),
+    ("lognormal (Tang)", "Lognormal (Tang)", "C2"),
+]
+
+
+def _cols(df: pd.DataFrame) -> tuple[str, str, str, str]:
+    ic = "infection_prob" if "infection_prob" in df.columns else None
+    ec = "bs_out_extinct" if "bs_out_extinct" in df.columns else None
+    pc = "bs_out_late_mean_prevalence" if "bs_out_late_mean_prevalence" in df.columns else None
+    tc = "bs_out_final_tick" if "bs_out_final_tick" in df.columns else None
+    assert ic and ec
+    return ic, ec, pc or ic, tc or ec
+
+
+def _filter_seed(df: pd.DataFrame, seed: int) -> pd.DataFrame:
+    sc = pick_column(df, "expt_seed", "expt-seed", "random_seed")
+    if sc is None:
+        return df
+    return df.loc[df[sc].astype(int) == int(seed)].copy()
+
+
+def _discovered_er_seeds() -> list[int]:
+    seeds: set[int] = set()
+    for p in EDGES_DIR.glob("edges_ER_*.csv"):
+        stem = p.stem.replace("edges_ER_", "")
+        if stem.isdigit():
+            seeds.add(int(stem))
+    if seeds:
+        return sorted(seeds)
+    return list(DEFAULT_ER_SEEDS)
+
+
+def _edges_er_path(seed: int) -> Path:
+    return EDGES_DIR / f"edges_ER_{int(seed)}.csv"
+
+
+def plot_survival_curves(beta_pred: float, out_path: Path, *, primary_seed: int = PRIMARY_ER_SEED) -> None:
+    sets = [
+        (T05, "Exponential", "C0"),
+        (T06, "Power law (Tang)", "C1"),
+        (T07, "Lognormal (Tang)", "C2"),
+    ]
+    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+    for path, label, color in sets:
+        if not path.is_file():
+            continue
+        df = read_behaviorspace_table(path)
+        df = _filter_seed(df, primary_seed)
+        if df.empty:
+            continue
+        ic, ec, pc, tc = _cols(df)
+        cur = survival_curve(df, ic, ec, prev_col=pc, tick_col=tc)
+        ax.plot(
+            cur[ic],
+            cur["p_survive"],
+            "o-",
+            ms=4,
+            lw=1.5,
+            color=color,
+            label=label,
+        )
+    ax.axvline(beta_pred, color="0.35", ls="--", lw=1.2, label=r"$\beta_{\mathrm{pred}}$ (spectral, $c{=}1$)")
+    ax.axhline(0.5, color="0.65", ls=":", lw=1.0)
+    ax.set_xlabel(r"Infection probability $\beta$")
+    ax.set_ylabel("Fraction not extinct at time limit")
+    ax.set_title(f"ER expt-seed {primary_seed}: survival vs $\\beta$ (24 replicates per $\\beta$)")
+    ax.set_ylim(-0.02, 1.05)
+    ax.legend(loc="lower right", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def plot_ratio_bar(emp_path: Path, beta_pred: float, out_path: Path, *, primary_seed: int = PRIMARY_ER_SEED) -> None:
+    if not emp_path.is_file():
+        return
+    t = pd.read_csv(emp_path)
+    t = t[t["net_label"].astype(str) == "ER"].copy()
+    if "random_seed" in t.columns:
+        t = t[t["random_seed"].astype(int) == int(primary_seed)]
+    order = ["exponential", "power law (Tang)", "lognormal (Tang)"]
+    labels = {
+        "exponential": "Exponential",
+        "power law (Tang)": "Power law (Tang)",
+        "lognormal (Tang)": "Lognormal (Tang)",
+    }
+    rows = []
+    for r in order:
+        sub = t[t["recovery_regime"].astype(str).str.lower() == r]
+        if sub.empty:
+            continue
+        rows.append(sub.iloc[0])
+    if not rows:
+        return
+    d = pd.DataFrame(rows)
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    x = np.arange(len(d))
+    ratios = d["ratio_surv_50_over_pred"].astype(float).values
+    err_lo = (d["beta_hat_surv_50"].astype(float) - d["beta_hat_surv_50_ci_low"].astype(float)) / beta_pred
+    err_hi = (d["beta_hat_surv_50_ci_high"].astype(float) - d["beta_hat_surv_50"].astype(float)) / beta_pred
+    err = np.vstack([err_lo.values, err_hi.values])
+    colors = ["C0", "C1", "C2"][: len(d)]
+    ax.bar(x, ratios, color=colors, yerr=err, capsize=4, ecolor="0.35", width=0.65)
+    ax.axhline(1.0, color="0.2", ls="--", lw=1.2)
+    ax.set_xticks(x)
+    ax.set_xticklabels([labels.get(str(r).lower(), r) for r in d["recovery_regime"]], rotation=12, ha="right")
+    ax.set_ylabel(r"$\hat{\beta}_{\mathrm{surv}\,50} / \beta_{\mathrm{pred}}$")
+    ax.set_title(f"Empirical vs spectral threshold (bootstrap CI), ER seed {primary_seed}")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def plot_median_extinct(emp_path: Path, out_path: Path, *, primary_seed: int = PRIMARY_ER_SEED) -> None:
+    if not emp_path.is_file():
+        return
+    t = pd.read_csv(emp_path)
+    t = t[t["net_label"].astype(str) == "ER"].copy()
+    if "random_seed" in t.columns:
+        t = t[t["random_seed"].astype(int) == int(primary_seed)]
+    order = ["exponential", "power law (Tang)", "lognormal (Tang)"]
+    labels = {
+        "exponential": "Exponential",
+        "power law (Tang)": "Power law (Tang)",
+        "lognormal (Tang)": "Lognormal (Tang)",
+    }
+    ys = []
+    xs = []
+    for r in order:
+        sub = t[t["recovery_regime"].astype(str).str.lower() == r]
+        if sub.empty:
+            continue
+        xs.append(labels.get(r, r))
+        ys.append(float(sub.iloc[0]["median_tick_if_extinct"]))
+    if not ys:
+        return
+    fig, ax = plt.subplots(figsize=(6.5, 4.0))
+    ax.bar(range(len(ys)), ys, color=["C0", "C1", "C2"][: len(ys)])
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs, rotation=12, ha="right")
+    ax.set_ylabel("Median final tick (extinct runs only)")
+    ax.set_title(f"Pipeline summary: extinction time by recovery law (ER seed {primary_seed})")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def _write_placeholder_figure(out_path: Path, message: str) -> None:
+    fig, ax = plt.subplots(figsize=(7.5, 3.2))
+    ax.text(0.5, 0.5, message, ha="center", va="center", fontsize=10, ma="center")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_threshold_ratio_by_seed(emp_path: Path, out_path: Path) -> None:
+    """Grouped bars: recovery regime x expt-seed, ratio hat_beta/beta_pred (from empirical_thresholds.csv)."""
+    if not emp_path.is_file():
+        _write_placeholder_figure(out_path, "Missing output/empirical_thresholds.csv — run aggregate_thresholds after BehaviorSpace.")
+        return
+    t = pd.read_csv(emp_path)
+    t = t[t["net_label"].astype(str) == "ER"].copy()
+    if t.empty or "random_seed" not in t.columns:
+        _write_placeholder_figure(out_path, "No ER rows in empirical_thresholds.csv.")
+        return
+    seeds = sorted(t["random_seed"].astype(int).unique().tolist())
+    if len(seeds) < 2:
+        _write_placeholder_figure(
+            out_path,
+            "Only one expt-seed in empirical_thresholds.csv.\n"
+            "Run experiments 01 and 05–07 with expt-seed 10001–10003, then aggregate_thresholds.",
+        )
+        return
+    known_lower = set(t["recovery_regime"].astype(str).str.lower())
+    regimes = [r for r, _, _ in REGIME_ORDER if r in known_lower]
+    if not regimes:
+        regimes = sorted(known_lower)
+    n_r, n_s = len(regimes), len(seeds)
+    fig, ax = plt.subplots(figsize=(max(7.0, 1.2 * n_r * n_s), 4.5))
+    x = np.arange(n_r, dtype=float)
+    width = 0.8 / n_s
+    cmap = plt.cm.tab10(np.linspace(0, 0.9, n_s))
+    for i, s in enumerate(seeds):
+        offs = x - 0.4 + width / 2 + i * width
+        ratios = []
+        for r in regimes:
+            row = t[
+                (t["recovery_regime"].astype(str).str.lower() == r)
+                & (t["random_seed"].astype(int) == s)
+            ]
+            ratios.append(float(row.iloc[0]["ratio_surv_50_over_pred"]) if not row.empty else float("nan"))
+        ax.bar(offs, ratios, width=width * 0.92, color=cmap[i], label=f"seed {s}")
+    ax.axhline(1.0, color="0.2", ls="--", lw=1.2)
+    ax.set_xticks(x)
+    lbls = {r: L for r, L, _ in REGIME_ORDER}
+    ax.set_xticklabels([lbls.get(r, r) for r in regimes], rotation=14, ha="right")
+    ax.set_ylabel(r"$\hat{\beta}_{\mathrm{surv}\,50} / \beta_{\mathrm{pred}}$")
+    ax.set_title("ER robustness: empirical survival threshold vs spectral prediction by graph draw")
+    ax.legend(title="expt-seed", fontsize=9)
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def _median_extinct_by_beta(df: pd.DataFrame, ic: str, ec: str, tc: str) -> pd.DataFrame:
+    rows = []
+    for beta, g in df.groupby(ic, dropna=False):
+        ext = g[ec].astype(float) >= 0.5
+        ticks = pd.to_numeric(g.loc[ext, tc], errors="coerce").dropna()
+        rows.append(
+            {
+                ic: beta,
+                "median_tick_extinct": float(np.median(ticks)) if len(ticks) else float("nan"),
+                "n_extinct": int(ext.sum()),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(ic).reset_index(drop=True)
+
+
+def plot_extinct_median_vs_beta_by_seed(out_path: Path, seeds: list[int] | None = None) -> None:
+    """
+    Facet one panel per expt-seed; each panel shows median final tick (extinct runs only) vs beta
+    for the three recovery experiments.
+    """
+    sets = [
+        (T05, "Exponential", "C0"),
+        (T06, "Power law (Tang)", "C1"),
+        (T07, "Lognormal (Tang)", "C2"),
+    ]
+    if seeds is None:
+        seeds = _discovered_er_seeds()
+    # Only plot seeds present in all three files
+    present: list[int] = []
+    for s in seeds:
+        ok = True
+        for path, _, _ in sets:
+            if not path.is_file():
+                ok = False
+                break
+            df = read_behaviorspace_table(path)
+            df_s = _filter_seed(df, s)
+            if df_s.empty:
+                ok = False
+                break
+        if ok:
+            present.append(s)
+    if not present:
+        return
+    fig, axes = plt.subplots(
+        1,
+        len(present),
+        figsize=(5.2 * len(present), 4.6),
+        sharey=True,
+    )
+    if len(present) == 1:
+        axes = [axes]
+    for ax, seed in zip(axes, present):
+        for path, label, color in sets:
+            if not path.is_file():
+                continue
+            df = read_behaviorspace_table(path)
+            df = _filter_seed(df, seed)
+            ic, ec, _pc, tc = _cols(df)
+            cur = _median_extinct_by_beta(df, ic, ec, tc)
+            cur = cur[np.isfinite(cur["median_tick_extinct"])]
+            if cur.empty:
+                continue
+            ax.plot(
+                cur[ic],
+                cur["median_tick_extinct"],
+                "o-",
+                ms=3,
+                lw=1.4,
+                color=color,
+                label=label,
+            )
+        ax.set_xlabel(r"Infection probability $\beta$")
+        ax.set_title(f"expt-seed {seed}")
+        ax.grid(True, alpha=0.3)
+    axes[0].set_ylabel("Median final tick (extinct runs)")
+    handles, labels = axes[0].get_legend_handles_labels()
+    if not handles:
+        for ax in axes:
+            handles, labels = ax.get_legend_handles_labels()
+            if handles:
+                break
+    fig.legend(handles, labels, loc="upper center", ncol=3, fontsize=8, bbox_to_anchor=(0.5, 1.02))
+    fig.suptitle("Extinction-time summary vs $\\beta$ (finite-horizon runs that absorbed)", y=1.08)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_extinct_tick_violins_by_beta(
+    out_path: Path,
+    *,
+    primary_seed: int = PRIMARY_ER_SEED,
+    betas: tuple[float, ...] = (0.026, 0.032, 0.038, 0.044),
+) -> None:
+    """Per regime: violin of extinction times at selected beta (extinct runs, primary seed)."""
+    sets = [
+        (T05, "Exponential"),
+        (T06, "Power law (Tang)"),
+        (T07, "Lognormal (Tang)"),
+    ]
+    fig, axes = plt.subplots(len(sets), 1, figsize=(9.0, 2.8 * len(sets)), sharex=True)
+    if len(sets) == 1:
+        axes = [axes]
+    for ax, (path, reg_title) in zip(axes, sets):
+        if not path.is_file():
+            ax.set_visible(False)
+            continue
+        df = read_behaviorspace_table(path)
+        df = _filter_seed(df, primary_seed)
+        ic, ec, _pc, tc = _cols(df)
+        parts_data: list[np.ndarray] = []
+        pos: list[int] = []
+        labels: list[str] = []
+        for j, b in enumerate(betas):
+            sub = df.loc[(pd.to_numeric(df[ic], errors="coerce") - b).abs() < 1e-9]
+            sub = sub.loc[sub[ec].astype(float) >= 0.5, tc]
+            sub = pd.to_numeric(sub, errors="coerce").dropna().to_numpy()
+            if len(sub) > 0:
+                parts_data.append(sub)
+                pos.append(j + 1)
+                labels.append(f"{b:.3f}")
+        if parts_data:
+            vp = ax.violinplot(parts_data, positions=pos, showmeans=True, showmedians=False, widths=0.65)
+            for b in vp["bodies"]:
+                b.set_alpha(0.75)
+        ax.set_ylabel("Final tick")
+        ax.set_title(f"{reg_title} — ER seed {primary_seed}")
+        ax.grid(True, axis="y", alpha=0.3)
+    axes[-1].set_xticks(range(1, len(betas) + 1))
+    axes[-1].set_xticklabels([f"{b:.3f}" for b in betas])
+    axes[-1].set_xlabel(r"Infection probability $\beta$ (selected grid values)")
+    fig.suptitle("Distribution of extinction times conditional on $\\beta$ (extinct replicates only)", y=1.01)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_trajectory(out_path: Path) -> None:
+    if not T08.is_file():
+        return
+    df = read_behaviorspace_table(T08)
+    step_col = "step" if "step" in df.columns else None
+    gcol = "bs_out_prev_grp" if "bs_out_prev_grp" in df.columns else None
+    mcol = "bs_out_prev_mf" if "bs_out_prev_mf" in df.columns else None
+    run_col = "run_number" if "run_number" in df.columns else None
+    if not all([step_col, gcol, mcol, run_col]):
+        return
+    best_run = None
+    best_len = 0
+    for rn, g in df.groupby(run_col):
+        g2 = g.sort_values(step_col)
+        if len(g2) > best_len:
+            best_len = len(g2)
+            best_run = rn
+    sub = df[df[run_col] == best_run].sort_values(step_col)
+    fig, ax = plt.subplots(figsize=(8.0, 4.5))
+    ax.plot(sub[step_col], sub[gcol], label="Microscopic grp-SIS", lw=1.8)
+    ax.plot(sub[step_col], sub[mcol], "--", label="Homogeneous mean-field", lw=1.5, alpha=0.9)
+    ax.set_xlabel("Time step")
+    ax.set_ylabel("Prevalence (fraction infected)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_title(f"Experiment 08 (run {int(best_run)}), $\\beta={float(sub['infection_prob'].iloc[0]):.4f}$")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def plot_er_network(out_path: Path, seed: int = PRIMARY_ER_SEED, n_sample: int = 420, layout_seed: int = 42) -> None:
+    """Induced subgraph on a random subset of nodes for a readable schematic."""
+    edge_path = _edges_er_path(seed)
+    if not edge_path.is_file():
+        edge_path = ROOT / "output" / "edges" / "edges_ER_10001.csv"
+    if not edge_path.is_file():
+        return
+    edges = pd.read_csv(edge_path)
+    c0, c1 = edges.columns[0], edges.columns[1]
+    a = pd.to_numeric(edges[c0], errors="coerce")
+    b = pd.to_numeric(edges[c1], errors="coerce")
+    mask = a.notna() & b.notna()
+    a = a.loc[mask].to_numpy(dtype=np.int64)
+    b = b.loc[mask].to_numpy(dtype=np.int64)
+    rng = np.random.default_rng(layout_seed)
+    nodes = np.unique(np.concatenate([a, b]))
+    pick = set(rng.choice(nodes, size=min(n_sample, len(nodes)), replace=False))
+    keep = np.array([(x in pick) and (y in pick) for x, y in zip(a, b)])
+    aa, bb = a[keep], b[keep]
+    if len(aa) == 0:
+        return
+    try:
+        import networkx as nx
+    except ImportError:
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.text(0.5, 0.5, "Install networkx to render network figure:\n  pip install networkx", ha="center", va="center")
+        ax.axis("off")
+        fig.savefig(out_path, dpi=120)
+        plt.close(fig)
+        return
+
+    G = nx.Graph()
+    G.add_edges_from(zip(aa.tolist(), bb.tolist()))
+    pos = nx.spring_layout(G, seed=layout_seed, k=0.22, iterations=60)
+    fig, ax = plt.subplots(figsize=(6.8, 6.8))
+    nx.draw_networkx_edges(G, pos, ax=ax, alpha=0.35, width=0.6, edge_color="0.45")
+    infected = set(rng.choice(list(G.nodes()), size=min(12, len(G)), replace=False))
+    ncolor = ["#c0392b" if n in infected else "#95a5a6" for n in G.nodes()]
+    nx.draw_networkx_nodes(G, pos, ax=ax, node_size=22, node_color=ncolor, linewidths=0)
+    ax.axis("off")
+    ax.set_title(f"ER subgraph (seed {seed}, {len(G)} nodes, $|E|={G.number_of_edges()}$), schematic layout")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
+def _load_bs_numeric_constants(experiment_name: str) -> dict[str, float]:
+    """Scalar numeric constants from a BehaviorSpace experiment (first value only)."""
+    tree = ET.parse(BS_XML)
+    root = tree.getroot()
+    for expt in root.findall("experiment"):
+        if expt.get("name") != experiment_name:
+            continue
+        consts: dict[str, float] = {}
+        const_block = expt.find("constants")
+        if const_block is None:
+            return consts
+        for vs in const_block.findall("enumeratedValueSet"):
+            if not vs.findall("value"):
+                continue
+            raw = vs.findall("value")[0].get("value")
+            var = vs.get("variable")
+            if raw is None or var is None:
+                continue
+            try:
+                consts[var] = float(raw)
+            except ValueError:
+                continue
+        return consts
+    raise KeyError(f"Experiment {experiment_name!r} not found in {BS_XML}")
+
+
+def load_recovery_calibration_from_bs() -> tuple[float, float, float]:
+    """(\texttt{recovery-mean}, \texttt{power-law-lambda}, \texttt{lognormal-sigma}) from expts 05--07."""
+    e5 = _load_bs_numeric_constants("05-baseline-empirical-threshold-ER")
+    e6 = _load_bs_numeric_constants("06-baseline-ER-power-law-Tang")
+    e7 = _load_bs_numeric_constants("07-baseline-ER-lognormal-Tang")
+    mu = float(e5["recovery-mean"])
+    lam = float(e6["power-law-lambda"])
+    sig = float(e7["lognormal-sigma"])
+    return mu, lam, sig
+
+
+def plot_recovery_pdfs(out_path: Path) -> None:
+    """Theoretical PDFs for the three laws used in experiments 05--07 (common mean, different variance).
+
+    Uses continuous laws with the Tang parameterisation (shifted Pareto tail index ``lambda``,
+    lognormal log-scale ``sigma``) and an exponential with the same mean (continuous analogue of
+    the NetLogo draw before integer rounding).
+    """
+    mu, lam, sig = load_recovery_calibration_from_bs()
+    lam = max(2.01, lam)
+    t0 = mu * (lam - 2.0) / (lam - 1.0)
+    alpha = lam - 1.0
+    mu_logn = float(np.log(mu) - (sig**2) / 2.0)
+
+    x_max = 45.0
+    x = np.linspace(1e-3, x_max, 3000)
+
+    y_exp = stats.expon.pdf(x, scale=mu)
+    var_exp = float(stats.expon.var(scale=mu))
+
+    y_ln = stats.lognorm.pdf(x, s=sig, scale=np.exp(mu_logn))
+    var_ln = float(stats.lognorm.var(s=sig, scale=np.exp(mu_logn)))
+
+    y_pl = stats.pareto.pdf(x, alpha, scale=t0)
+    var_pl = float(stats.pareto.var(alpha, scale=t0))
+
+    fig, ax = plt.subplots(figsize=(8.2, 5.0))
+    ax.plot(x, y_exp, color="C0", lw=2.0, label=rf"Exponential ($\mathrm{{Var}}={var_exp:.2f}$)")
+    ax.plot(x, y_pl, color="C1", lw=2.0, label=rf"Power law / Pareto ($\mathrm{{Var}}={var_pl:.2f}$)")
+    ax.plot(x, y_ln, color="C2", lw=2.0, label=rf"Lognormal ($\mathrm{{Var}}={var_ln:.2f}$)")
+    ax.axvline(mu, color="0.35", ls="--", lw=1.3, label=rf"common mean $\mathbb{{E}}[W]={mu:g}$")
+
+    ax.set_xlabel(r"recovery time $W$ (ticks; continuous law before rounding)")
+    ax.set_ylabel("probability density $f_W(w)$")
+    ax.set_title(
+        rf"Recovery-time PDFs at fixed mean ($\lambda={lam:g}$, $\sigma={sig:g}$; from BehaviorSpace expts.~05--07)"
+    )
+    ax.set_xlim(0, x_max)
+    ax.set_ylim(0, None)
+    ax.legend(loc="upper right", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+
+def beta_pred_from_lambda_csv(primary_seed: int = PRIMARY_ER_SEED) -> float:
+    beta_pred = 0.0278527163754995
+    if not LAM.is_file():
+        return beta_pred
+    lam = pd.read_csv(LAM)
+    er = lam[(lam["net_label"].astype(str) == "ER") & (lam["random_seed"].astype(int) == int(primary_seed))]
+    if er.empty:
+        er = lam[lam["net_label"].astype(str) == "ER"]
+    if not er.empty and "lambda_max" in er.columns:
+        lamv = float(er.iloc[0]["lambda_max"])
+        ew = 5.0
+        beta_pred = 1.0 / (lamv * ew)
+    return beta_pred
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Export report figures from output/")
+    parser.add_argument(
+        "--primary-seed",
+        type=int,
+        default=PRIMARY_ER_SEED,
+        help="Seed for survival/ratio/extinct summary figures (default: 10001)",
+    )
+    args = parser.parse_args()
+    primary = int(args.primary_seed)
+
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    beta_pred = beta_pred_from_lambda_csv(primary)
+
+    plot_er_network(REPORT_DIR / "er_network_example.png", seed=primary)
+    plot_recovery_pdfs(REPORT_DIR / "fig_recovery_pdfs.png")
+    plot_survival_curves(beta_pred, REPORT_DIR / "fig_er_survival_vs_beta.png", primary_seed=primary)
+    plot_ratio_bar(EMP, beta_pred, REPORT_DIR / "fig_er_threshold_ratio_bar.png", primary_seed=primary)
+    plot_median_extinct(EMP, REPORT_DIR / "fig_er_median_extinct_tick.png", primary_seed=primary)
+    plot_trajectory(REPORT_DIR / "fig_er_prevalence_trajectory.png")
+    plot_threshold_ratio_by_seed(EMP, REPORT_DIR / "fig_er_threshold_ratio_by_seed.png")
+    plot_extinct_median_vs_beta_by_seed(REPORT_DIR / "fig_er_extinct_median_vs_beta_by_seed.png")
+    plot_extinct_tick_violins_by_beta(
+        REPORT_DIR / "fig_er_extinct_tick_violin_by_beta.png",
+        primary_seed=primary,
+    )
+    print("Wrote figures to", REPORT_DIR)
+
+
+if __name__ == "__main__":
+    main()
