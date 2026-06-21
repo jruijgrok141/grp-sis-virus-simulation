@@ -1,0 +1,4 @@
+edge_file,net_label,random_seed,num_nodes,num_edges,k_mean,k2_mean,tau_pred_homogeneous_mf,tau_pred_heterogeneous_mf,lambda_max
+C:\Dossiers\master-rmai-researchproject-virussimulation\output\edges\edges_ER_10001.csv,ER,10001,2000,5979,5.979,41.862,0.16725204883759826,0.14282642969757775,7.180628176572717
+C:\Dossiers\master-rmai-researchproject-virussimulation\output\edges\edges_ER_10002.csv,ER,10002,2000,6083,6.083,42.981,0.1643925694558606,0.1415276517531002,7.240375064086838
+C:\Dossiers\master-rmai-researchproject-virussimulation\output\edges\edges_ER_10003.csv,ER,10003,2000,5979,5.979,41.963,0.16725204883759826,0.14248266329862022,7.174884556884998

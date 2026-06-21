@@ -12,6 +12,7 @@ The work builds on the grp-SIS perspective (general recovery-time distributions 
 | `netlogo/behaviorspace_experiments.xml` | BehaviorSpace experiment definitions (reference copy). Comments in that file note NetLogo 7 XML expectations and how experiments relate to headless workflows. |
 | `proposal/` | Research proposal (LaTeX/PDF) and supporting figure(s). |
 | `report/` | Written results: `report.tex` / `report.pdf`, figures, `Further_Exploration_Report.md` (extended agenda and workspace notes), and related artefacts. |
+| `oplevering/` | **Submission bundle** for IM1312: self-contained copy of the final report, proposal, NetLogo model, analysis scripts, simulation outputs, and references. Start here if you want the deliverable as one folder. |
 | `references/` | Key papers (PDFs) and a short summary (`Tang_Yao_Xie_Feng_grp-SIS_samenvatting.md`). |
 
 ## Running the simulation
@@ -25,9 +26,16 @@ Outputs such as exported edge lists are intended to support comparisons against 
 
 ## Documentation to read first
 
+- **`oplevering/report/report.pdf`** — Final report in the submission bundle (same content as `report/report.pdf` when regenerated).
 - **`proposal/research_proposal.pdf`** — Abstract, background, RQ1–RQ3, and simulation setup (e.g. fixed ER-style specification, mean recovery time).
-- **`report/report.pdf`** — Results, notation, and discussion aligned with the simulation.
+- **`report/report.pdf`** — Results, notation, and discussion aligned with the simulation (development copy under `report/`).
 - **`report/Further_Exploration_Report.md`** — Consolidated framing, workspace map, and follow-up ideas (some paths there refer to optional tooling or outputs that may live outside this clone).
+
+Regenerate the submission folder from the repo root after updating the report or outputs:
+
+```text
+py -3 scripts/build_oplevering.py
+```
 
 ## License / citation
 
