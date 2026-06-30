@@ -1,0 +1,2119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.3" snapToGrid="true">
+  <code><![CDATA[;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; grp-SIS Virus Propagation in Complex Networks
+;; NetLogo implementation inspired by:
+;; - "Simulation of Virus Propagation in Complex Networks Using NetLogo
+;;    Multiagent Testbed" (IntechOpen, 2025)
+;; - "SIS Epidemic Modelling on Homogeneous Networked System:
+;;    General Recovering Process and Mean-Field Perspective"
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+globals [
+  ;; population level counts
+  num-susceptible
+  num-infected
+  num-recovered  ;; kept for compatibility with baseline interface (always 0 in SIS)
+  num-immune
+
+  ;; recovery event statistics (SIS)
+  num-recoveries-this-tick
+  num-recoveries-total
+
+  ;; flags
+  network-built?
+
+  ;; mean-field tracking (classical Markovian SIS)
+  rho-I-mf             ;; mean-field fraction infected
+  basic-reproduction-R0 ;; beta * <k> / mu
+
+  ;; empirical samples of drawn recovery times (for visualization)
+  recovery-times
+
+  ;; BehaviorSpace / Python pipeline: rolling prevalence & export
+  bs-collect-metrics?
+  bs-prev-samples
+  late-window-len
+  ;; max-ticks is the string input on the Interface (not listed here — would duplicate the widget global)
+  sim-tick-limit       ;; numeric cap for go + BehaviorSpace exit (set in setup from max-ticks)
+  ;; RNG + edge filenames (must not start with "run-" — parses as run primitive + -seed)
+  expt-seed
+]
+
+turtles-own [
+  state              ;; "susceptible" "infected" "immune"
+  infection-time     ;; time since current infection started
+  recovery-deadline  ;; sample from general recovery-time distribution w(t)
+  degree             ;; number of neighbors (for diagnostics / immunization)
+]
+
+links-own [
+  ;; put link-specific properties here if needed
+]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; SETUP
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to setup
+  ;; preserve globals cleared by clear-all (BS assigns before setup runs)
+  let rs expt-seed
+  let mt max-ticks
+  let cms? (bs-collect-metrics? = true)
+  clear-all
+  set-default-shape turtles "dot"
+  set expt-seed rs
+  set max-ticks mt
+  set bs-collect-metrics? cms?
+
+  set bs-prev-samples []
+  set late-window-len 200
+  set sim-tick-limit read-from-string max-ticks
+  if expt-seed > 0 [ random-seed expt-seed ]
+
+  ;; reset list of sampled recovery times for visualization
+  set recovery-times []
+
+  create-nodes
+  build-network
+  compute-degrees
+  apply-immunization
+  ;; Distinct epidemic trajectory per BehaviorSpace repetition on the same graph draw.
+  if expt-seed > 0 [ random-seed (expt-seed * 100000 + behaviorspace-run-number) ]
+  infect-initial-nodes
+  update-colors-and-counts
+
+  ;; reset recovery statistics
+  set num-recoveries-this-tick 0
+  set num-recoveries-total 0
+  set recovery-times []
+
+  ;; initialize mean-field SIS with same initial prevalence
+  let total-non-immune (num-susceptible + num-infected)
+  if total-non-immune = 0 [
+    set rho-I-mf 0
+  ]
+  if total-non-immune > 0 [
+    set rho-I-mf num-infected / total-non-immune
+  ]
+  compute-basic-reproduction-number
+
+  set network-built? true
+  reset-ticks
+end
+
+to create-nodes
+  ;; node diameter 2 mm on screen: px = mm * (dpi/25.4); size in patch units = px / patch-size
+  let node-diameter-px (2 / 25.4) * 96
+  create-turtles num-nodes [
+    setxy random-xcor random-ycor
+    set size node-diameter-px / patch-size
+    set state "susceptible"
+    set infection-time 0
+    set degree 0
+  ]
+end
+
+to build-network
+  ask links [ die ]
+
+  if interconnection-structure = "Lattice4" [
+    build-lattice4
+  ]
+  if interconnection-structure = "Lattice8" [
+    build-lattice8
+  ]
+  if interconnection-structure = "All vs. All" [
+    build-all-vs-all
+  ]
+  if interconnection-structure = "Ring" [
+    build-ring
+  ]
+  if interconnection-structure = "other" [
+    if network-type = "Erdos-Renyi (random)" [
+      build-er-network
+    ]
+    if network-type = "Watts-Strogatz (small-world)" [
+      build-ws-network
+    ]
+    if network-type = "Barabasi-Albert (scale-free)" [
+      build-ba-network
+    ]
+  ]
+
+  layout-network
+end
+
+;; Regular lattice with 4 neighbors (von Neumann)
+to build-lattice4
+  arrange-nodes-on-grid
+  let ordered sort turtles
+  let n length ordered
+  if n = 0 [ stop ]
+  let side ceiling sqrt n
+
+  ;; connect each node to right and bottom neighbors (no wrap) to form rectangles
+  let i 0
+  while [ i < n ] [
+    let row i / side
+    let col i mod side
+    let t item i ordered
+
+    ;; link to right neighbor in same row
+    if col < (side - 1) and (i + 1) < n [
+      let right-neighbor item (i + 1) ordered
+      ask t [
+        if not link-neighbor? right-neighbor [
+          create-link-with right-neighbor
+        ]
+      ]
+    ]
+
+    ;; link to neighbor in next row (down)
+    if (row < (side - 1)) and (i + side) < n [
+      let down item (i + side) ordered
+      ask t [
+        if not link-neighbor? down [
+          create-link-with down
+        ]
+      ]
+    ]
+
+    set i i + 1
+  ]
+end
+
+;; Regular lattice with 8 neighbors (Moore)
+to build-lattice8
+  arrange-nodes-on-grid
+  let ordered sort turtles
+  let n length ordered
+  if n = 0 [ stop ]
+  let side ceiling sqrt n
+
+  ;; start from Lattice4 connections
+  build-lattice4
+
+  ;; add diagonal neighbors to get 8-neighbor (Moore) lattice
+  let i 0
+  while [ i < n ] [
+    let row i / side
+    let col i mod side
+    let t item i ordered
+
+    ;; down-right diagonal
+    if (row < (side - 1)) and (col < (side - 1)) and (i + side + 1) < n [
+      let dr item (i + side + 1) ordered
+      ask t [
+        if not link-neighbor? dr [
+          create-link-with dr
+        ]
+      ]
+    ]
+
+    ;; down-left diagonal
+    if (row < (side - 1)) and (col > 0) and (i + side - 1) < n [
+      let dl item (i + side - 1) ordered
+      ask t [
+        if not link-neighbor? dl [
+          create-link-with dl
+        ]
+      ]
+    ]
+
+    set i i + 1
+  ]
+end
+
+;; Complete graph (all-to-all)
+to build-all-vs-all
+  ask turtles [
+    ask other turtles with [ who > [who] of myself ] [
+      create-link-with myself
+    ]
+  ]
+end
+
+;; Ring topology: each node connected to its two nearest neighbors on a ring
+to build-ring
+  let ordered sort turtles
+  let n length ordered
+  if n < 2 [ stop ]
+
+  ;; place nodes on a circle that fits within the current world
+  let radius max (list 1 (min (list (max-pxcor - 1) (max-pycor - 1))))
+  let i 0
+  while [ i < n ] [
+    let t item i ordered
+    let angle 360 * i / n
+    ask t [
+      setxy (radius * cos angle) (radius * sin angle)
+    ]
+    set i i + 1
+  ]
+
+  ;; create ring links between neighbors
+  let j 0
+  while [ j < n ] [
+    let t item j ordered
+    let neighbor item ((j + 1) mod n) ordered
+    ask t [
+      if not link-neighbor? neighbor [
+        create-link-with neighbor
+      ]
+    ]
+    set j j + 1
+  ]
+end
+
+;; Place nodes roughly on a square grid so lattice structures make sense
+to arrange-nodes-on-grid
+  let ordered sort turtles
+  let n length ordered
+  if n = 0 [ stop ]
+  let side ceiling sqrt n
+  let offset (side - 1) / 2
+  let i 0
+  while [ i < n ] [
+    let t item i ordered
+    let row i / side
+    let col i mod side
+    ask t [
+      setxy (col - offset) (offset - row)
+    ]
+    set i i + 1
+  ]
+end
+
+;; Erdos-Renyi random network: each possible pair is connected with probability p
+to build-er-network
+  let p-link avg-degree / (num-nodes - 1)  ;; approx expected degree
+  ask turtles [
+    ask turtles with [who > [who] of myself] [
+      if random-float 1.0 < p-link [
+        create-link-with myself
+      ]
+    ]
+  ]
+end
+
+;; Watts-Strogatz small-world network:
+;; 1. Start with ring lattice with k neighbors
+;; 2. Rewire each edge with probability rewiring-prob
+to build-ws-network
+  let k max (list 1 (round avg-degree))
+  if k mod 2 = 1 [ set k k + 1 ] ;; ensure even
+
+  let ordered sort turtles
+  let n length ordered
+
+  ;; ring lattice
+  let half-k k / 2
+  let i 0
+  while [ i < n ] [
+    let t item i ordered
+    let j 1
+    while [ j <= half-k ] [
+      let neighbor item ((i + j) mod n) ordered
+      ask t [
+        if not link-neighbor? neighbor [
+          create-link-with neighbor
+        ]
+      ]
+      set j j + 1
+    ]
+    set i i + 1
+  ]
+
+  ;; rewiring
+  ask links [
+    if random-float 1.0 < rewiring-prob [
+      let a end1
+      let b end2
+      let new-b one-of turtles with [
+        self != a and not link-neighbor? a
+      ]
+      if new-b != nobody [
+        die
+        ask a [ create-link-with new-b ]
+      ]
+    ]
+  ]
+end
+
+;; Barabasi-Albert scale-free network:
+;; 1. Start from a small connected core
+;; 2. Add nodes one-by-one, attaching m links preferentially to high-degree nodes
+to build-ba-network
+  let m max (list 1 (round avg-degree / 2))
+
+  ;; start with initial core of (m + 1) fully-connected nodes
+  let core-size max (list 2 (m + 1))
+  let core-turtles n-of core-size turtles
+  ask core-turtles [
+    ask other core-turtles [
+      if not link-neighbor? myself [ create-link-with myself ]
+    ]
+  ]
+
+  ;; add remaining nodes preferentially
+  let remaining turtles with [ not member? self core-turtles ]
+  ask remaining [
+    let m-links 0
+    while [ m-links < m and any? turtles with [ self != myself ] ] [
+      let target preferential-attachment-target
+      if target != nobody and target != self [
+        if not link-neighbor? target [
+          create-link-with target
+          set m-links m-links + 1
+        ]
+      ]
+    ]
+  ]
+end
+
+;; choose a target node for preferential attachment
+to-report preferential-attachment-target
+  let candidates sort turtles
+  if length candidates = 0 [ report nobody ]
+
+  ;; probability proportional to degree+1 (avoid zero)
+  let weights map [ t -> count [ my-links ] of t + 1 ] candidates
+  let total sum weights
+  let r random-float total
+  let acc 0
+  let i 0
+  while [ i < length candidates ] [
+    set acc acc + item i weights
+    if r < acc [
+      report item i candidates
+    ]
+    set i i + 1
+  ]
+  report last candidates ;; fallback
+end
+
+;; willekeurig gelijkmatig over het patch-vlak (i.p.v. spring → rand-concentratie)
+to scatter-nodes-uniform
+  if not any? turtles [ stop ]
+  ;; kleine rand alleen tegen afsnijden van de dot; verder het hele patch-vlak vullen
+  let margin-frac 0.005
+  let x-span (max-pxcor - min-pxcor)
+  let y-span (max-pycor - min-pycor)
+  let xmin min-pxcor + margin-frac * x-span
+  let xmax max-pxcor - margin-frac * x-span
+  let ymin min-pycor + margin-frac * y-span
+  let ymax max-pycor - margin-frac * y-span
+  ask turtles [
+    setxy (xmin + random-float (xmax - xmin)) (ymin + random-float (ymax - ymin))
+  ]
+end
+
+to layout-network
+  scatter-nodes-uniform
+  if any? links [
+    ask links [ set hidden? true ]
+  ]
+  display
+end
+
+to compute-degrees
+  ask turtles [
+    set degree count link-neighbors
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; IMMUNIZATION & INITIAL INFECTION
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to apply-immunization
+  if immunization-strategy = "none" [ stop ]
+
+  let num-to-immune round (immunized-fraction * count turtles)
+  if num-to-immune <= 0 [ stop ]
+
+  if immunization-strategy = "random" [
+    ask n-of num-to-immune turtles [
+      set state "immune"
+    ]
+  ]
+
+  if immunization-strategy = "high-degree first" [
+    compute-degrees
+    let sorted sort-by [[a b] -> [degree] of a > [degree] of b] turtles
+    let targets sublist sorted 0 min (list num-to-immune length sorted)
+    ask turtle-set targets [
+      set state "immune"
+    ]
+  ]
+end
+
+to infect-initial-nodes
+  let susceptibles turtles with [ state = "susceptible" ]
+  if any? susceptibles [
+    let n-infect min (list initial-infected count susceptibles)
+    ask n-of n-infect susceptibles [
+      set state "infected"
+      set infection-time 0
+      set recovery-deadline draw-recovery-time
+
+      ;; log sampled recovery time for visualization
+      set recovery-times lput recovery-deadline recovery-times
+    ]
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GO / DYNAMICS (grp-SIS)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to go
+  if (network-built? != true) [ stop ]
+  if not any? turtles with [ state = "infected" ] [ stop ]
+  if ticks >= sim-tick-limit [ stop ]
+
+  ;; microscopic grp-SIS dynamics: Poisson infection, general recovery time
+  infection-step
+  recovery-step
+
+  ;; macroscopic classical SIS mean-field trajectory for comparison
+  update-mean-field-SIS
+
+  update-colors-and-counts
+  
+  ;; Interface plots only (skip in BehaviorSpace — large speedup headless).
+  let total-non-immune (num-susceptible + num-infected)
+  if (behaviorspace-run-number = 0) [
+    let frac-infected (ifelse-value (total-non-immune = 0) [0] [num-infected / total-non-immune])
+    set-current-plot "Prevalence: grp-SIS vs mean-field"
+    set-current-plot-pen "grp-SIS infected"
+    plot frac-infected
+    set-current-plot-pen "mean-field SIS"
+    plot rho-I-mf
+  ]
+
+  if (bs-collect-metrics? = true) [
+    let p (ifelse-value (total-non-immune = 0) [0] [num-infected / total-non-immune])
+    set bs-prev-samples lput p bs-prev-samples
+  ]
+
+  tick
+end
+
+to infection-step
+  ;; infection process is memoryless Poisson with rate beta
+  ask turtles with [ state = "infected" ] [
+    ask link-neighbors with [ state = "susceptible" ] [
+      if random-float 1.0 < infection-prob [
+        set state "infected"
+        set infection-time 0
+        set recovery-deadline draw-recovery-time
+
+        ;; log sampled recovery time for visualization
+        set recovery-times lput recovery-deadline recovery-times
+      ]
+    ]
+  ]
+end
+
+to recovery-step
+  ;; non-Markovian recovery: each infected agent has its own sampled deadline
+  ;; track how many recoveries (i.e., S <- I transitions) occur each tick
+  set num-recoveries-this-tick 0
+  ask turtles with [ state = "infected" ] [
+    set infection-time infection-time + 1
+    if infection-time >= recovery-deadline [
+      set num-recoveries-this-tick num-recoveries-this-tick + 1
+      set num-recoveries-total num-recoveries-total + 1
+
+      ;; SIS: recovered individuals immediately become susceptible again
+      set state "susceptible"
+      set infection-time 0
+      set recovery-deadline 0
+    ]
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; GENERAL RECOVERY-TIME DISTRIBUTION (grp-SIS)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report draw-recovery-time
+  ;; Draw a recovery waiting time W ~ w(t)  (grp-SIS: general recovering process)
+  ;; Tang et al. (2025) Sec. 2.3: exponential, power law (shifted Pareto), lognormal.
+  ;; - recovery-mean fixes E[W] for lognormal & power law (scale-free threshold tau = beta * E[W])
+  ;; Controlled from the GUI by recovery-distribution, recovery-mean,
+  ;; power-law-lambda, lognormal-sigma, gamma-shape, weibull-shape.
+
+  if recovery-distribution = "deterministic" [
+    report max (list 1 recovery-mean)
+  ]
+
+  if recovery-distribution = "exponential" [
+    ;; classical Markovian SIS, mean = 1 / mu = recovery-mean
+    let mu 1 / recovery-mean
+    report max (list 1 round (- (ln (max (list 1e-6 (1 - random-float 1)))) / mu))
+  ]
+
+  ;; Lognormal: ln W ~ Normal(mu, sigma^2); E[W] = exp(mu + sigma^2/2) = recovery-mean
+  if recovery-distribution = "lognormal (Tang)" [
+    let sig max (list 1e-6 lognormal-sigma)
+    let mu (ln recovery-mean) - (sig * sig) / 2
+    let w exp (mu + sig * random-normal 0 1)
+    report max (list 1 round w)
+  ]
+
+  ;; Shifted power law on [t0, inf): Tang Eq. (13)-(14), lambda > 2
+  ;; E[W] = t0 * (lambda - 1) / (lambda - 2)  =>  t0 = E[W] * (lambda - 2) / (lambda - 1)
+  if recovery-distribution = "power law (Tang)" [
+    let lam max (list 2.01 power-law-lambda)
+    let t0 recovery-mean * (lam - 2) / (lam - 1)
+    ;; inverse CDF: V = 1-U ~ Uniform(0,1),  t = t0 * V^(1/(1-lambda))
+    let v max (list 1e-12 (random-float 1))
+    let t t0 * (v ^ (1 / (1 - lam)))
+    report max (list 1 round t)
+  ]
+
+  if recovery-distribution = "gamma (k,theta)" [
+    ;; If gamma-shape = a in (0,1): Beta(a,1-a) * Exp(1) ~ Gamma(a,1); scale so E[W] = recovery-mean = a * theta.
+    ;; If a >= 1: Erlang (sum of k exponentials) with integer k >= 1.
+    ifelse (gamma-shape < 1) [
+      let a gamma-shape
+      let u max (list 1e-12 random-float 1)
+      let v max (list 1e-12 random-float 1)
+      let ua u ^ (1 / a)
+      let vb v ^ (1 / (1 - a))
+      let ybeta ua / (ua + vb)
+      ;; avoid name "e"; space after unary minus so -ln parses as negated ln
+      let exp1 (- (ln (max (list 1e-12 random-float 1))))
+      let wdraw ybeta * exp1
+      let theta recovery-mean / a
+      report max (list 1 round (theta * wdraw))
+    ] [
+      let k max (list 1 round gamma-shape)
+      let theta recovery-mean / k
+      let total 0
+      let i 0
+      while [ i < k ] [
+        let rate 1 / theta
+        set total total + (- (ln (max (list 1e-6 (1 - random-float 1)))) / rate)
+        set i i + 1
+      ]
+      report max (list 1 round total)
+    ]
+  ]
+
+  if recovery-distribution = "weibull (k,lambda)" [
+    ;; inverse CDF: W = ( -ln(1-U) )^(1/k) / lambda
+    let k max (list 0.1 weibull-shape)
+    ;; NetLogo has no built-in gamma function; we interpret
+    ;; recovery-mean approximately as 1 / lambda here so that
+    ;; lambda = 1 / recovery-mean.
+    let lambda 1 / recovery-mean
+    let u max (list 1e-6 (1 - random-float 1))
+    let w ((- ln u) ^ (1 / k)) / lambda
+    report max (list 1 round w)
+  ]
+
+  ;; fallback: deterministic mean
+  report max (list 1 recovery-mean)
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; MEAN-FIELD SIS (CLASSICAL MARKOVIAN) FOR COMPARISON
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to compute-basic-reproduction-number
+  ;; Approximate R0 = beta * <k> / mu
+  ;; Here, infection-prob and recovery-mean are per-tick probabilities/means.
+  ;; We interpret:
+  ;;  - beta  ~ infection-prob
+  ;;  - mu    ~ 1 / recovery-mean
+  let mu 1 / recovery-mean
+  let beta infection-prob
+  let avg-k mean [ degree ] of turtles
+  set basic-reproduction-R0 beta * avg-k / mu
+end
+
+to update-mean-field-SIS
+  ;; Discrete-time Euler step for:
+  ;; d rho_I / dt = -mu * rho_I + beta * <k> * (1 - rho_I) * rho_I
+  let dt 1
+  let mu 1 / recovery-mean
+  let beta infection-prob
+
+  let drho (- mu * rho-I-mf + beta * mean [ degree ] of turtles * (1 - rho-I-mf) * rho-I-mf)
+  set rho-I-mf rho-I-mf + dt * drho
+
+  if rho-I-mf < 0 [ set rho-I-mf 0 ]
+  if rho-I-mf > 1 [ set rho-I-mf 1 ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; VISUALIZATION & METRICS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to update-colors-and-counts
+  set num-susceptible count turtles with [ state = "susceptible" ]
+  set num-infected    count turtles with [ state = "infected" ]
+  set num-recovered   0
+  set num-immune      count turtles with [ state = "immune" ]
+
+  ask turtles [
+    if state = "susceptible" [ set color green ]
+    if state = "infected"    [ set color red ]
+    if state = "immune"      [ set color gray ]
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; EXPORT & BEHAVIORSPACE METRICS (Python / Jupyter pipeline)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to export-network-edges [ path ]
+  ;; undirected edge list: one row per pair, CSV header endpoint1,endpoint2
+  ;; file-open appends if the file exists — delete first so re-runs do not stack duplicates
+  if file-exists? path [ file-delete path ]
+  file-open path
+  file-print "endpoint1,endpoint2"
+  ask links [
+    let a [who] of end1
+    let b [who] of end2
+    let lo min (list a b)
+    let hi max (list a b)
+    file-print (word lo "," hi)
+  ]
+  file-close
+end
+
+to-report safe-net-label
+  ;; Prefer explicit labels for regular interconnection structures
+  if interconnection-structure = "Lattice4" [ report "Lat4" ]
+  if interconnection-structure = "Lattice8" [ report "Lat8" ]
+  if interconnection-structure = "Ring"     [ report "Ring" ]
+
+  ;; Fallback to complex random graph types when using interconnection-structure = "other"
+  if network-type = "Erdos-Renyi (random)"           [ report "ER" ]
+  if network-type = "Watts-Strogatz (small-world)"   [ report "WS" ]
+  if network-type = "Barabasi-Albert (scale-free)"   [ report "BA" ]
+  report "NA"
+end
+
+to-report bs-out-extinct
+  report ifelse-value (any? turtles with [state = "infected"]) [0] [1]
+end
+
+to-report bs-out-final-tick
+  report ticks
+end
+
+to-report bs-out-late-mean-prevalence
+  let n length bs-prev-samples
+  ifelse (n = 0) [
+    report 0
+  ] [
+    let w late-window-len
+    let start (n - w)
+    if start < 0 [ set start 0 ]
+    report mean sublist bs-prev-samples start n
+  ]
+end
+
+to-report bs-out-tau-sim
+  report infection-prob * recovery-mean
+end
+
+to-report bs-out-mean-degree
+  report mean [degree] of turtles
+end
+
+;; Per-step trajectory metrics (experiment 08-dynamics-trajectory-ER)
+to-report bs-out-prev-grp
+  let total-non-immune (num-susceptible + num-infected)
+  report ifelse-value (total-non-immune = 0) [0] [num-infected / total-non-immune]
+end
+
+to-report bs-out-prev-mf
+  report rho-I-mf
+end
+
+to-report bs-out-count-S
+  report num-susceptible
+end
+
+to-report bs-out-count-I
+  report num-infected
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; INTERACTIVE HELPERS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to rebuild-network
+  ;; lets you change topology parameters and rebuild without clearing infection
+  build-network
+  compute-degrees
+  layout-network
+end
+]]></code>
+  <widgets>
+    <view x="462" wrappingAllowedX="true" y="1" frameRate="30.0" minPycor="-2" height="495" showTickCounter="true" patchSize="98.2" fontSize="10" wrappingAllowedY="true" width="495" tickCounterLabel="ticks" maxPycor="2" updateMode="1" maxPxcor="2" minPxcor="-2"></view>
+    <monitor x="821" precision="17" y="591" height="61" fontSize="11" width="185" display="actual prevalence ">num-infected / (num-susceptible + num-infected)</monitor>
+    <monitor x="631" precision="17" y="591" height="61" fontSize="11" width="185" display="rho-I-mf">rho-I-mf</monitor>
+    <monitor x="441" precision="17" y="591" height="60" fontSize="11" width="185" display="num-recovered">num-recoveries-total</monitor>
+    <monitor x="441" precision="17" y="521" height="65" fontSize="11" width="185" display="num-immune">num-immune</monitor>
+    <monitor x="631" precision="17" y="521" height="65" fontSize="11" width="185" display="num-susceptible">num-susceptible</monitor>
+    <monitor x="821" precision="17" y="521" height="60" fontSize="11" width="185" display="num-infected">num-infected</monitor>
+    <plot x="1011" autoPlotX="true" yMax="1.0" autoPlotY="false" y="132" xMin="0.0" height="185" legend="false" xMax="10.0" yMin="0.0" width="535" display="Prevalence: grp-SIS vs mean-field">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="grp-SIS infected" color="-16777216" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="mean-field SIS" color="-7500403" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+    </plot>
+    <plot x="1011" autoPlotX="true" yMax="10.0" autoPlotY="true" y="2" xMin="0.0" height="120" legend="false" xMax="10.0" yMin="0.0" width="535" xAxis="time (ticks)" display="Virus dynamics">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="susceptible" color="-16777216" legend="true">
+        <setup></setup>
+        <update>plot num-susceptible
+</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="infected" color="-7500403" legend="true">
+        <setup></setup>
+        <update>plot num-infected</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="recovered" color="-2674135" legend="true">
+        <setup></setup>
+        <update>plot num-recovered</update>
+      </pen>
+    </plot>
+    <plot x="1011" autoPlotX="true" yMax="10.0" autoPlotY="true" y="327" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="0.0" width="535" display="Recovery time distribution">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="1" display="default" color="-16777216" legend="true">
+        <setup></setup>
+        <update>histogram recovery-times</update>
+      </pen>
+    </plot>
+    <slider x="15" step="1" y="218" max="100" width="150" display="initial-infected" height="50" min="1" direction="Horizontal" default="68.0" variable="initial-infected"></slider>
+    <slider x="185" step="1" y="160" max="40" width="160" display="avg-degree" height="50" min="2" direction="Horizontal" default="6.0" variable="avg-degree"></slider>
+    <slider x="185" step="0.01" y="215" max="1.0" width="160" display="immunized-fraction" height="50" min="0.0" direction="Horizontal" default="0.0" variable="immunized-fraction"></slider>
+    <chooser x="15" y="275" height="60" variable="immunization-strategy" current="0" width="325" display="immunization-strategy">
+      <choice type="string" value="none"></choice>
+      <choice type="string" value="random"></choice>
+      <choice type="string" value="high-degree first"></choice>
+    </chooser>
+    <chooser x="15" y="80" height="60" variable="network-type" current="0" width="335" display="network-type">
+      <choice type="string" value="Erdos-Renyi (random)"></choice>
+      <choice type="string" value="Watts-Strogatz (small-world)"></choice>
+      <choice type="string" value="Barabasi-Albert (scale-free)"></choice>
+    </chooser>
+    <chooser x="15" y="10" height="60" variable="interconnection-structure" current="4" width="335" display="interconnection-structure">
+      <choice type="string" value="All vs. All"></choice>
+      <choice type="string" value="Lattice4"></choice>
+      <choice type="string" value="Lattice8"></choice>
+      <choice type="string" value="Ring"></choice>
+      <choice type="string" value="other"></choice>
+    </chooser>
+    <chooser x="19" y="360" height="60" variable="recovery-distribution" current="5" width="321" display="recovery-distribution">
+      <choice type="string" value="deterministic"></choice>
+      <choice type="string" value="exponential"></choice>
+      <choice type="string" value="lognormal (Tang)"></choice>
+      <choice type="string" value="power law (Tang)"></choice>
+      <choice type="string" value="gamma (k,theta)"></choice>
+      <choice type="string" value="weibull (k,lambda)"></choice>
+    </chooser>
+    <slider x="19" step="1" y="430" max="100" width="150" display="recovery-mean" height="50" min="1" direction="Horizontal" default="5.0" variable="recovery-mean"></slider>
+    <slider x="190" step="0.01" y="495" max="1.0" width="150" display="rewiring-prob" height="50" min="0.0" direction="Horizontal" default="0.07" variable="rewiring-prob"></slider>
+    <slider x="19" step="0.01" y="558" max="10" width="150" display="power-law-lambda" height="50" min="2.05" direction="Horizontal" default="4.24" variable="power-law-lambda"></slider>
+    <slider x="186" step="0.05" y="558" max="3" width="154" display="lognormal-sigma" height="50" min="0.1" direction="Horizontal" default="1.0" variable="lognormal-sigma"></slider>
+    <slider x="19" step="0.1" y="495" max="5" width="150" display="weibull-shape" height="50" min="0.5" direction="Horizontal" default="0.6" variable="weibull-shape"></slider>
+    <slider x="20" step="0.01" y="625" max="1" width="320" display="infection-prob" height="50" min="0" direction="Horizontal" default="0.22" variable="infection-prob"></slider>
+    <button x="375" y="210" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
+    <button x="376" y="258" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55" display="go">go</button>
+    <slider x="186" step="0.05" y="430" max="10" width="154" display="gamma-shape" height="50" min="0.2" direction="Horizontal" default="1.0" variable="gamma-shape"></slider>
+    <slider x="15" step="1" y="160" max="3000" width="155" display="num-nodes" height="50" min="2" direction="Horizontal" default="2000.0" variable="num-nodes"></slider>
+    <input x="440" multiline="false" y="675" height="60" variable="max-ticks" type="string" width="565">500</input>
+  </widgets>
+  <info>## WHAT IS IT?
+
+(a general understanding of what the model is trying to show or explain)
+
+## HOW IT WORKS
+
+(what rules the agents use to create the overall behavior of the model)
+
+## HOW TO USE IT
+
+(how to use the model, including a description of each of the items in the Interface tab)
+
+## THINGS TO NOTICE
+
+(suggested things for the user to notice while running the model)
+
+## THINGS TO TRY
+
+(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+
+## EXTENDING THE MODEL
+
+(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+
+## NETLOGO FEATURES
+
+(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+
+## RELATED MODELS
+
+(models in the NetLogo Models Library and elsewhere which are of related interest)
+
+## CREDITS AND REFERENCES
+
+(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+</info>
+  <turtleShapes>
+    <shape name="default" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="5"></point>
+        <point x="40" y="250"></point>
+        <point x="150" y="205"></point>
+        <point x="260" y="250"></point>
+      </polygon>
+    </shape>
+    <shape name="airplane" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="0"></point>
+        <point x="135" y="15"></point>
+        <point x="120" y="60"></point>
+        <point x="120" y="105"></point>
+        <point x="15" y="165"></point>
+        <point x="15" y="195"></point>
+        <point x="120" y="180"></point>
+        <point x="135" y="240"></point>
+        <point x="105" y="270"></point>
+        <point x="120" y="285"></point>
+        <point x="150" y="270"></point>
+        <point x="180" y="285"></point>
+        <point x="210" y="270"></point>
+        <point x="165" y="240"></point>
+        <point x="180" y="180"></point>
+        <point x="285" y="195"></point>
+        <point x="285" y="165"></point>
+        <point x="180" y="105"></point>
+        <point x="180" y="60"></point>
+        <point x="165" y="15"></point>
+      </polygon>
+    </shape>
+    <shape name="arrow" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="0"></point>
+        <point x="0" y="150"></point>
+        <point x="105" y="150"></point>
+        <point x="105" y="293"></point>
+        <point x="195" y="293"></point>
+        <point x="195" y="150"></point>
+        <point x="300" y="150"></point>
+      </polygon>
+    </shape>
+    <shape name="box" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="285"></point>
+        <point x="285" y="225"></point>
+        <point x="285" y="75"></point>
+        <point x="150" y="135"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="135"></point>
+        <point x="15" y="75"></point>
+        <point x="150" y="15"></point>
+        <point x="285" y="75"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="15" y="75"></point>
+        <point x="15" y="225"></point>
+        <point x="150" y="285"></point>
+        <point x="150" y="135"></point>
+      </polygon>
+      <line endX="150" startY="285" marked="false" color="255" endY="135" startX="150"></line>
+      <line endX="15" startY="135" marked="false" color="255" endY="75" startX="150"></line>
+      <line endX="285" startY="135" marked="false" color="255" endY="75" startX="150"></line>
+    </shape>
+    <shape name="bug" rotatable="true" editableColorIndex="0">
+      <circle x="96" y="182" marked="true" color="-1920102913" diameter="108" filled="true"></circle>
+      <circle x="110" y="127" marked="true" color="-1920102913" diameter="80" filled="true"></circle>
+      <circle x="110" y="75" marked="true" color="-1920102913" diameter="80" filled="true"></circle>
+      <line endX="80" startY="100" marked="true" color="-1920102913" endY="30" startX="150"></line>
+      <line endX="220" startY="100" marked="true" color="-1920102913" endY="30" startX="150"></line>
+    </shape>
+    <shape name="butterfly" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="165"></point>
+        <point x="209" y="199"></point>
+        <point x="225" y="225"></point>
+        <point x="225" y="255"></point>
+        <point x="195" y="270"></point>
+        <point x="165" y="255"></point>
+        <point x="150" y="240"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="165"></point>
+        <point x="89" y="198"></point>
+        <point x="75" y="225"></point>
+        <point x="75" y="255"></point>
+        <point x="105" y="270"></point>
+        <point x="135" y="255"></point>
+        <point x="150" y="240"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="139" y="148"></point>
+        <point x="100" y="105"></point>
+        <point x="55" y="90"></point>
+        <point x="25" y="90"></point>
+        <point x="10" y="105"></point>
+        <point x="10" y="135"></point>
+        <point x="25" y="180"></point>
+        <point x="40" y="195"></point>
+        <point x="85" y="194"></point>
+        <point x="139" y="163"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="162" y="150"></point>
+        <point x="200" y="105"></point>
+        <point x="245" y="90"></point>
+        <point x="275" y="90"></point>
+        <point x="290" y="105"></point>
+        <point x="290" y="135"></point>
+        <point x="275" y="180"></point>
+        <point x="260" y="195"></point>
+        <point x="215" y="195"></point>
+        <point x="162" y="165"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="150" y="255"></point>
+        <point x="135" y="225"></point>
+        <point x="120" y="150"></point>
+        <point x="135" y="120"></point>
+        <point x="150" y="105"></point>
+        <point x="165" y="120"></point>
+        <point x="180" y="150"></point>
+        <point x="165" y="225"></point>
+      </polygon>
+      <circle x="135" y="90" marked="false" color="255" diameter="30" filled="true"></circle>
+      <line endX="195" startY="105" marked="false" color="255" endY="60" startX="150"></line>
+      <line endX="105" startY="105" marked="false" color="255" endY="60" startX="150"></line>
+    </shape>
+    <shape name="car" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="300" y="180"></point>
+        <point x="279" y="164"></point>
+        <point x="261" y="144"></point>
+        <point x="240" y="135"></point>
+        <point x="226" y="132"></point>
+        <point x="213" y="106"></point>
+        <point x="203" y="84"></point>
+        <point x="185" y="63"></point>
+        <point x="159" y="50"></point>
+        <point x="135" y="50"></point>
+        <point x="75" y="60"></point>
+        <point x="0" y="150"></point>
+        <point x="0" y="165"></point>
+        <point x="0" y="225"></point>
+        <point x="300" y="225"></point>
+        <point x="300" y="180"></point>
+      </polygon>
+      <circle x="180" y="180" marked="false" color="255" diameter="90" filled="true"></circle>
+      <circle x="30" y="180" marked="false" color="255" diameter="90" filled="true"></circle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="162" y="80"></point>
+        <point x="132" y="78"></point>
+        <point x="134" y="135"></point>
+        <point x="209" y="135"></point>
+        <point x="194" y="105"></point>
+        <point x="189" y="96"></point>
+        <point x="180" y="89"></point>
+      </polygon>
+      <circle x="47" y="195" marked="true" color="-1920102913" diameter="58" filled="true"></circle>
+      <circle x="195" y="195" marked="true" color="-1920102913" diameter="58" filled="true"></circle>
+    </shape>
+    <shape name="circle" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+    </shape>
+    <shape name="circle 2" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+    </shape>
+    <shape name="cow" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="200" y="193"></point>
+        <point x="197" y="249"></point>
+        <point x="179" y="249"></point>
+        <point x="177" y="196"></point>
+        <point x="166" y="187"></point>
+        <point x="140" y="189"></point>
+        <point x="93" y="191"></point>
+        <point x="78" y="179"></point>
+        <point x="72" y="211"></point>
+        <point x="49" y="209"></point>
+        <point x="48" y="181"></point>
+        <point x="37" y="149"></point>
+        <point x="25" y="120"></point>
+        <point x="25" y="89"></point>
+        <point x="45" y="72"></point>
+        <point x="103" y="84"></point>
+        <point x="179" y="75"></point>
+        <point x="198" y="76"></point>
+        <point x="252" y="64"></point>
+        <point x="272" y="81"></point>
+        <point x="293" y="103"></point>
+        <point x="285" y="121"></point>
+        <point x="255" y="121"></point>
+        <point x="242" y="118"></point>
+        <point x="224" y="167"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="73" y="210"></point>
+        <point x="86" y="251"></point>
+        <point x="62" y="249"></point>
+        <point x="48" y="208"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="25" y="114"></point>
+        <point x="16" y="195"></point>
+        <point x="9" y="204"></point>
+        <point x="23" y="213"></point>
+        <point x="25" y="200"></point>
+        <point x="39" y="123"></point>
+      </polygon>
+    </shape>
+    <shape name="cylinder" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+    </shape>
+    <shape name="dot" rotatable="false" editableColorIndex="0">
+      <circle x="90" y="90" marked="true" color="-1920102913" diameter="120" filled="true"></circle>
+    </shape>
+    <shape name="face happy" rotatable="false" editableColorIndex="0">
+      <circle x="8" y="8" marked="true" color="-1920102913" diameter="285" filled="true"></circle>
+      <circle x="60" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <circle x="180" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="150" y="255"></point>
+        <point x="90" y="239"></point>
+        <point x="62" y="213"></point>
+        <point x="47" y="191"></point>
+        <point x="67" y="179"></point>
+        <point x="90" y="203"></point>
+        <point x="109" y="218"></point>
+        <point x="150" y="225"></point>
+        <point x="192" y="218"></point>
+        <point x="210" y="203"></point>
+        <point x="227" y="181"></point>
+        <point x="251" y="194"></point>
+        <point x="236" y="217"></point>
+        <point x="212" y="240"></point>
+      </polygon>
+    </shape>
+    <shape name="face neutral" rotatable="false" editableColorIndex="0">
+      <circle x="8" y="7" marked="true" color="-1920102913" diameter="285" filled="true"></circle>
+      <circle x="60" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <circle x="180" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <rectangle endX="240" startY="195" marked="false" color="255" endY="225" startX="60" filled="true"></rectangle>
+    </shape>
+    <shape name="face sad" rotatable="false" editableColorIndex="0">
+      <circle x="8" y="8" marked="true" color="-1920102913" diameter="285" filled="true"></circle>
+      <circle x="60" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <circle x="180" y="75" marked="false" color="255" diameter="60" filled="true"></circle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="150" y="168"></point>
+        <point x="90" y="184"></point>
+        <point x="62" y="210"></point>
+        <point x="47" y="232"></point>
+        <point x="67" y="244"></point>
+        <point x="90" y="220"></point>
+        <point x="109" y="205"></point>
+        <point x="150" y="198"></point>
+        <point x="192" y="205"></point>
+        <point x="210" y="220"></point>
+        <point x="227" y="242"></point>
+        <point x="251" y="229"></point>
+        <point x="236" y="206"></point>
+        <point x="212" y="183"></point>
+      </polygon>
+    </shape>
+    <shape name="fish" rotatable="false" editableColorIndex="0">
+      <polygon color="-1" filled="true" marked="false">
+        <point x="44" y="131"></point>
+        <point x="21" y="87"></point>
+        <point x="15" y="86"></point>
+        <point x="0" y="120"></point>
+        <point x="15" y="150"></point>
+        <point x="0" y="180"></point>
+        <point x="13" y="214"></point>
+        <point x="20" y="212"></point>
+        <point x="45" y="166"></point>
+      </polygon>
+      <polygon color="-1" filled="true" marked="false">
+        <point x="135" y="195"></point>
+        <point x="119" y="235"></point>
+        <point x="95" y="218"></point>
+        <point x="76" y="210"></point>
+        <point x="46" y="204"></point>
+        <point x="60" y="165"></point>
+      </polygon>
+      <polygon color="-1" filled="true" marked="false">
+        <point x="75" y="45"></point>
+        <point x="83" y="77"></point>
+        <point x="71" y="103"></point>
+        <point x="86" y="114"></point>
+        <point x="166" y="78"></point>
+        <point x="135" y="60"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="30" y="136"></point>
+        <point x="151" y="77"></point>
+        <point x="226" y="81"></point>
+        <point x="280" y="119"></point>
+        <point x="292" y="146"></point>
+        <point x="292" y="160"></point>
+        <point x="287" y="170"></point>
+        <point x="270" y="195"></point>
+        <point x="195" y="210"></point>
+        <point x="151" y="212"></point>
+        <point x="30" y="166"></point>
+      </polygon>
+      <circle x="215" y="106" marked="false" color="255" diameter="30" filled="true"></circle>
+    </shape>
+    <shape name="flag" rotatable="false" editableColorIndex="0">
+      <rectangle endX="75" startY="15" marked="true" color="-1920102913" endY="300" startX="60" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="90" y="150"></point>
+        <point x="270" y="90"></point>
+        <point x="90" y="30"></point>
+      </polygon>
+      <line endX="90" startY="135" marked="true" color="-1920102913" endY="135" startX="75"></line>
+      <line endX="90" startY="45" marked="true" color="-1920102913" endY="45" startX="75"></line>
+    </shape>
+    <shape name="flower" rotatable="false" editableColorIndex="0">
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="135" y="120"></point>
+        <point x="165" y="165"></point>
+        <point x="180" y="210"></point>
+        <point x="180" y="240"></point>
+        <point x="150" y="300"></point>
+        <point x="165" y="300"></point>
+        <point x="195" y="240"></point>
+        <point x="195" y="195"></point>
+        <point x="165" y="135"></point>
+      </polygon>
+      <circle x="85" y="132" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="130" y="147" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="192" y="85" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="85" y="40" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="177" y="40" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="177" y="132" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="70" y="85" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="130" y="25" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="96" y="51" marked="true" color="-1920102913" diameter="108" filled="true"></circle>
+      <circle x="113" y="68" marked="false" color="255" diameter="74" filled="true"></circle>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="189" y="233"></point>
+        <point x="219" y="188"></point>
+        <point x="249" y="173"></point>
+        <point x="279" y="188"></point>
+        <point x="234" y="218"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="180" y="255"></point>
+        <point x="150" y="210"></point>
+        <point x="105" y="210"></point>
+        <point x="75" y="240"></point>
+        <point x="135" y="240"></point>
+      </polygon>
+    </shape>
+    <shape name="house" rotatable="false" editableColorIndex="0">
+      <rectangle endX="255" startY="120" marked="true" color="-1920102913" endY="285" startX="45" filled="true"></rectangle>
+      <rectangle endX="180" startY="210" marked="false" color="255" endY="285" startX="120" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="15" y="120"></point>
+        <point x="150" y="15"></point>
+        <point x="285" y="120"></point>
+      </polygon>
+      <line endX="270" startY="120" marked="false" color="255" endY="120" startX="30"></line>
+    </shape>
+    <shape name="leaf" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="210"></point>
+        <point x="135" y="195"></point>
+        <point x="120" y="210"></point>
+        <point x="60" y="210"></point>
+        <point x="30" y="195"></point>
+        <point x="60" y="180"></point>
+        <point x="60" y="165"></point>
+        <point x="15" y="135"></point>
+        <point x="30" y="120"></point>
+        <point x="15" y="105"></point>
+        <point x="40" y="104"></point>
+        <point x="45" y="90"></point>
+        <point x="60" y="90"></point>
+        <point x="90" y="105"></point>
+        <point x="105" y="120"></point>
+        <point x="120" y="120"></point>
+        <point x="105" y="60"></point>
+        <point x="120" y="60"></point>
+        <point x="135" y="30"></point>
+        <point x="150" y="15"></point>
+        <point x="165" y="30"></point>
+        <point x="180" y="60"></point>
+        <point x="195" y="60"></point>
+        <point x="180" y="120"></point>
+        <point x="195" y="120"></point>
+        <point x="210" y="105"></point>
+        <point x="240" y="90"></point>
+        <point x="255" y="90"></point>
+        <point x="263" y="104"></point>
+        <point x="285" y="105"></point>
+        <point x="270" y="120"></point>
+        <point x="285" y="135"></point>
+        <point x="240" y="165"></point>
+        <point x="240" y="180"></point>
+        <point x="270" y="195"></point>
+        <point x="240" y="210"></point>
+        <point x="180" y="210"></point>
+        <point x="165" y="195"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="195"></point>
+        <point x="135" y="240"></point>
+        <point x="120" y="255"></point>
+        <point x="105" y="255"></point>
+        <point x="105" y="285"></point>
+        <point x="135" y="285"></point>
+        <point x="165" y="240"></point>
+        <point x="165" y="195"></point>
+      </polygon>
+    </shape>
+    <shape name="line" rotatable="true" editableColorIndex="0">
+      <line endX="150" startY="0" marked="true" color="-1920102913" endY="300" startX="150"></line>
+    </shape>
+    <shape name="line half" rotatable="true" editableColorIndex="0">
+      <line endX="150" startY="0" marked="true" color="-1920102913" endY="150" startX="150"></line>
+    </shape>
+    <shape name="pentagon" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="15"></point>
+        <point x="15" y="120"></point>
+        <point x="60" y="285"></point>
+        <point x="240" y="285"></point>
+        <point x="285" y="120"></point>
+      </polygon>
+    </shape>
+    <shape name="person" rotatable="false" editableColorIndex="0">
+      <circle x="110" y="5" marked="true" color="-1920102913" diameter="80" filled="true"></circle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="105" y="90"></point>
+        <point x="120" y="195"></point>
+        <point x="90" y="285"></point>
+        <point x="105" y="300"></point>
+        <point x="135" y="300"></point>
+        <point x="150" y="225"></point>
+        <point x="165" y="300"></point>
+        <point x="195" y="300"></point>
+        <point x="210" y="285"></point>
+        <point x="180" y="195"></point>
+        <point x="195" y="90"></point>
+      </polygon>
+      <rectangle endX="172" startY="79" marked="true" color="-1920102913" endY="94" startX="127" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="195" y="90"></point>
+        <point x="240" y="150"></point>
+        <point x="225" y="180"></point>
+        <point x="165" y="105"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="105" y="90"></point>
+        <point x="60" y="150"></point>
+        <point x="75" y="180"></point>
+        <point x="135" y="105"></point>
+      </polygon>
+    </shape>
+    <shape name="plant" rotatable="false" editableColorIndex="0">
+      <rectangle endX="165" startY="90" marked="true" color="-1920102913" endY="300" startX="135" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="255"></point>
+        <point x="90" y="210"></point>
+        <point x="45" y="195"></point>
+        <point x="75" y="255"></point>
+        <point x="135" y="285"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="165" y="255"></point>
+        <point x="210" y="210"></point>
+        <point x="255" y="195"></point>
+        <point x="225" y="255"></point>
+        <point x="165" y="285"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="180"></point>
+        <point x="90" y="135"></point>
+        <point x="45" y="120"></point>
+        <point x="75" y="180"></point>
+        <point x="135" y="210"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="165" y="180"></point>
+        <point x="165" y="210"></point>
+        <point x="225" y="180"></point>
+        <point x="255" y="120"></point>
+        <point x="210" y="135"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="105"></point>
+        <point x="90" y="60"></point>
+        <point x="45" y="45"></point>
+        <point x="75" y="105"></point>
+        <point x="135" y="135"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="165" y="105"></point>
+        <point x="165" y="135"></point>
+        <point x="225" y="105"></point>
+        <point x="255" y="45"></point>
+        <point x="210" y="60"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="90"></point>
+        <point x="120" y="45"></point>
+        <point x="150" y="15"></point>
+        <point x="180" y="45"></point>
+        <point x="165" y="90"></point>
+      </polygon>
+    </shape>
+    <shape name="sheep" rotatable="false" editableColorIndex="15">
+      <circle x="203" y="65" marked="true" color="-1" diameter="88" filled="true"></circle>
+      <circle x="70" y="65" marked="true" color="-1" diameter="162" filled="true"></circle>
+      <circle x="150" y="105" marked="true" color="-1" diameter="120" filled="true"></circle>
+      <polygon color="-1920102913" filled="true" marked="false">
+        <point x="218" y="120"></point>
+        <point x="240" y="165"></point>
+        <point x="255" y="165"></point>
+        <point x="278" y="120"></point>
+      </polygon>
+      <circle x="214" y="72" marked="false" color="-1920102913" diameter="67" filled="true"></circle>
+      <rectangle endX="179" startY="223" marked="true" color="-1" endY="298" startX="164" filled="true"></rectangle>
+      <polygon color="-1" filled="true" marked="true">
+        <point x="45" y="285"></point>
+        <point x="30" y="285"></point>
+        <point x="30" y="240"></point>
+        <point x="15" y="195"></point>
+        <point x="45" y="210"></point>
+      </polygon>
+      <circle x="3" y="83" marked="true" color="-1" diameter="150" filled="true"></circle>
+      <rectangle endX="80" startY="221" marked="true" color="-1" endY="296" startX="65" filled="true"></rectangle>
+      <polygon color="-1" filled="true" marked="true">
+        <point x="195" y="285"></point>
+        <point x="210" y="285"></point>
+        <point x="210" y="240"></point>
+        <point x="240" y="210"></point>
+        <point x="195" y="210"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="false">
+        <point x="276" y="85"></point>
+        <point x="285" y="105"></point>
+        <point x="302" y="99"></point>
+        <point x="294" y="83"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="false">
+        <point x="219" y="85"></point>
+        <point x="210" y="105"></point>
+        <point x="193" y="99"></point>
+        <point x="201" y="83"></point>
+      </polygon>
+    </shape>
+    <shape name="square" rotatable="false" editableColorIndex="0">
+      <rectangle endX="270" startY="30" marked="true" color="-1920102913" endY="270" startX="30" filled="true"></rectangle>
+    </shape>
+    <shape name="square 2" rotatable="false" editableColorIndex="0">
+      <rectangle endX="270" startY="30" marked="true" color="-1920102913" endY="270" startX="30" filled="true"></rectangle>
+      <rectangle endX="240" startY="60" marked="false" color="255" endY="240" startX="60" filled="true"></rectangle>
+    </shape>
+    <shape name="star" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="151" y="1"></point>
+        <point x="185" y="108"></point>
+        <point x="298" y="108"></point>
+        <point x="207" y="175"></point>
+        <point x="242" y="282"></point>
+        <point x="151" y="216"></point>
+        <point x="59" y="282"></point>
+        <point x="94" y="175"></point>
+        <point x="3" y="108"></point>
+        <point x="116" y="108"></point>
+      </polygon>
+    </shape>
+    <shape name="target" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+      <circle x="60" y="60" marked="true" color="-1920102913" diameter="180" filled="true"></circle>
+      <circle x="90" y="90" marked="false" color="255" diameter="120" filled="true"></circle>
+      <circle x="120" y="120" marked="true" color="-1920102913" diameter="60" filled="true"></circle>
+    </shape>
+    <shape name="tree" rotatable="false" editableColorIndex="0">
+      <circle x="118" y="3" marked="true" color="-1920102913" diameter="94" filled="true"></circle>
+      <rectangle endX="180" startY="195" marked="false" color="-1653716737" endY="300" startX="120" filled="true"></rectangle>
+      <circle x="65" y="21" marked="true" color="-1920102913" diameter="108" filled="true"></circle>
+      <circle x="116" y="41" marked="true" color="-1920102913" diameter="127" filled="true"></circle>
+      <circle x="45" y="90" marked="true" color="-1920102913" diameter="120" filled="true"></circle>
+      <circle x="104" y="74" marked="true" color="-1920102913" diameter="152" filled="true"></circle>
+    </shape>
+    <shape name="triangle" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="30"></point>
+        <point x="15" y="255"></point>
+        <point x="285" y="255"></point>
+      </polygon>
+    </shape>
+    <shape name="triangle 2" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="30"></point>
+        <point x="15" y="255"></point>
+        <point x="285" y="255"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="151" y="99"></point>
+        <point x="225" y="223"></point>
+        <point x="75" y="224"></point>
+      </polygon>
+    </shape>
+    <shape name="truck" rotatable="false" editableColorIndex="0">
+      <rectangle endX="195" startY="45" marked="true" color="-1920102913" endY="187" startX="4" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="296" y="193"></point>
+        <point x="296" y="150"></point>
+        <point x="259" y="134"></point>
+        <point x="244" y="104"></point>
+        <point x="208" y="104"></point>
+        <point x="207" y="194"></point>
+      </polygon>
+      <rectangle endX="195" startY="60" marked="false" color="-1" endY="105" startX="195" filled="true"></rectangle>
+      <polygon color="255" filled="true" marked="false">
+        <point x="238" y="112"></point>
+        <point x="252" y="141"></point>
+        <point x="219" y="141"></point>
+        <point x="218" y="112"></point>
+      </polygon>
+      <circle x="234" y="174" marked="false" color="255" diameter="42" filled="true"></circle>
+      <rectangle endX="214" startY="185" marked="true" color="-1920102913" endY="194" startX="181" filled="true"></rectangle>
+      <circle x="144" y="174" marked="false" color="255" diameter="42" filled="true"></circle>
+      <circle x="24" y="174" marked="false" color="255" diameter="42" filled="true"></circle>
+      <circle x="24" y="174" marked="true" color="-1920102913" diameter="42" filled="false"></circle>
+      <circle x="144" y="174" marked="true" color="-1920102913" diameter="42" filled="false"></circle>
+      <circle x="234" y="174" marked="true" color="-1920102913" diameter="42" filled="false"></circle>
+    </shape>
+    <shape name="turtle" rotatable="true" editableColorIndex="0">
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="215" y="204"></point>
+        <point x="240" y="233"></point>
+        <point x="246" y="254"></point>
+        <point x="228" y="266"></point>
+        <point x="215" y="252"></point>
+        <point x="193" y="210"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="195" y="90"></point>
+        <point x="225" y="75"></point>
+        <point x="245" y="75"></point>
+        <point x="260" y="89"></point>
+        <point x="269" y="108"></point>
+        <point x="261" y="124"></point>
+        <point x="240" y="105"></point>
+        <point x="225" y="105"></point>
+        <point x="210" y="105"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="105" y="90"></point>
+        <point x="75" y="75"></point>
+        <point x="55" y="75"></point>
+        <point x="40" y="89"></point>
+        <point x="31" y="108"></point>
+        <point x="39" y="124"></point>
+        <point x="60" y="105"></point>
+        <point x="75" y="105"></point>
+        <point x="90" y="105"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="132" y="85"></point>
+        <point x="134" y="64"></point>
+        <point x="107" y="51"></point>
+        <point x="108" y="17"></point>
+        <point x="150" y="2"></point>
+        <point x="192" y="18"></point>
+        <point x="192" y="52"></point>
+        <point x="169" y="65"></point>
+        <point x="172" y="87"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="85" y="204"></point>
+        <point x="60" y="233"></point>
+        <point x="54" y="254"></point>
+        <point x="72" y="266"></point>
+        <point x="85" y="252"></point>
+        <point x="107" y="210"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="119" y="75"></point>
+        <point x="179" y="75"></point>
+        <point x="209" y="101"></point>
+        <point x="224" y="135"></point>
+        <point x="220" y="225"></point>
+        <point x="175" y="261"></point>
+        <point x="128" y="261"></point>
+        <point x="81" y="224"></point>
+        <point x="74" y="135"></point>
+        <point x="88" y="99"></point>
+      </polygon>
+    </shape>
+    <shape name="wheel" rotatable="false" editableColorIndex="0">
+      <circle x="3" y="3" marked="true" color="-1920102913" diameter="294" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+      <line endX="150" startY="285" marked="true" color="-1920102913" endY="15" startX="150"></line>
+      <line endX="285" startY="150" marked="true" color="-1920102913" endY="150" startX="15"></line>
+      <circle x="120" y="120" marked="true" color="-1920102913" diameter="60" filled="true"></circle>
+      <line endX="79" startY="40" marked="true" color="-1920102913" endY="269" startX="216"></line>
+      <line endX="269" startY="84" marked="true" color="-1920102913" endY="221" startX="40"></line>
+      <line endX="269" startY="216" marked="true" color="-1920102913" endY="79" startX="40"></line>
+      <line endX="221" startY="40" marked="true" color="-1920102913" endY="269" startX="84"></line>
+    </shape>
+    <shape name="wolf" rotatable="false" editableColorIndex="0">
+      <polygon color="255" filled="true" marked="false">
+        <point x="253" y="133"></point>
+        <point x="245" y="131"></point>
+        <point x="245" y="133"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="2" y="194"></point>
+        <point x="13" y="197"></point>
+        <point x="30" y="191"></point>
+        <point x="38" y="193"></point>
+        <point x="38" y="205"></point>
+        <point x="20" y="226"></point>
+        <point x="20" y="257"></point>
+        <point x="27" y="265"></point>
+        <point x="38" y="266"></point>
+        <point x="40" y="260"></point>
+        <point x="31" y="253"></point>
+        <point x="31" y="230"></point>
+        <point x="60" y="206"></point>
+        <point x="68" y="198"></point>
+        <point x="75" y="209"></point>
+        <point x="66" y="228"></point>
+        <point x="65" y="243"></point>
+        <point x="82" y="261"></point>
+        <point x="84" y="268"></point>
+        <point x="100" y="267"></point>
+        <point x="103" y="261"></point>
+        <point x="77" y="239"></point>
+        <point x="79" y="231"></point>
+        <point x="100" y="207"></point>
+        <point x="98" y="196"></point>
+        <point x="119" y="201"></point>
+        <point x="143" y="202"></point>
+        <point x="160" y="195"></point>
+        <point x="166" y="210"></point>
+        <point x="172" y="213"></point>
+        <point x="173" y="238"></point>
+        <point x="167" y="251"></point>
+        <point x="160" y="248"></point>
+        <point x="154" y="265"></point>
+        <point x="169" y="264"></point>
+        <point x="178" y="247"></point>
+        <point x="186" y="240"></point>
+        <point x="198" y="260"></point>
+        <point x="200" y="271"></point>
+        <point x="217" y="271"></point>
+        <point x="219" y="262"></point>
+        <point x="207" y="258"></point>
+        <point x="195" y="230"></point>
+        <point x="192" y="198"></point>
+        <point x="210" y="184"></point>
+        <point x="227" y="164"></point>
+        <point x="242" y="144"></point>
+        <point x="259" y="145"></point>
+        <point x="284" y="151"></point>
+        <point x="277" y="141"></point>
+        <point x="293" y="140"></point>
+        <point x="299" y="134"></point>
+        <point x="297" y="127"></point>
+        <point x="273" y="119"></point>
+        <point x="270" y="105"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="-1" y="195"></point>
+        <point x="14" y="180"></point>
+        <point x="36" y="166"></point>
+        <point x="40" y="153"></point>
+        <point x="53" y="140"></point>
+        <point x="82" y="131"></point>
+        <point x="134" y="133"></point>
+        <point x="159" y="126"></point>
+        <point x="188" y="115"></point>
+        <point x="227" y="108"></point>
+        <point x="236" y="102"></point>
+        <point x="238" y="98"></point>
+        <point x="268" y="86"></point>
+        <point x="269" y="92"></point>
+        <point x="281" y="87"></point>
+        <point x="269" y="103"></point>
+        <point x="269" y="113"></point>
+      </polygon>
+    </shape>
+    <shape name="x" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="270" y="75"></point>
+        <point x="225" y="30"></point>
+        <point x="30" y="225"></point>
+        <point x="75" y="270"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="30" y="75"></point>
+        <point x="75" y="30"></point>
+        <point x="270" y="225"></point>
+        <point x="225" y="270"></point>
+      </polygon>
+    </shape>
+  </turtleShapes>
+  <linkShapes>
+    <shape name="default" curviness="0.0">
+      <lines>
+        <line x="-0.2" visible="false">
+          <dash value="0.0"></dash>
+          <dash value="1.0"></dash>
+        </line>
+        <line x="0.0" visible="true">
+          <dash value="1.0"></dash>
+          <dash value="0.0"></dash>
+        </line>
+        <line x="0.2" visible="false">
+          <dash value="0.0"></dash>
+          <dash value="1.0"></dash>
+        </line>
+      </lines>
+      <indicator>
+        <shape name="link direction" rotatable="true" editableColorIndex="0">
+          <line endX="90" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+          <line endX="210" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+        </shape>
+      </indicator>
+    </shape>
+  </linkShapes>
+  <previewCommands>setup repeat 75 [ go ]</previewCommands>
+  <experiments>
+    <experiment name="01-export-networks" repetitions="1" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>set bs-collect-metrics? false
+set immunization-strategy "none"
+set immunized-fraction 0
+setup
+export-network-edges (word "../output/edges/edges_" safe-net-label "_" expt-seed ".csv")</setup>
+      <go>wait 0</go>
+      <exitCondition>true</exitCondition>
+      <metrics>
+        <metric>safe-net-label</metric>
+        <metric>count links</metric>
+        <metric>num-nodes</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;other&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="2000"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="network-type">
+          <value value="&quot;Erdos-Renyi (random)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;3000&quot;"></value>
+        </enumeratedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="02-threshold-exponential" repetitions="8" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "exponential"
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-extinct</metric>
+        <metric>bs-out-final-tick</metric>
+        <metric>bs-out-late-mean-prevalence</metric>
+        <metric>bs-out-tau-sim</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;Lattice4&quot;"></value>
+          <value value="&quot;Ring&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="1001"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="200"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;3000&quot;"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.02" step="0.03" last="0.56"></steppedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="03-threshold-power-law-Tang" repetitions="8" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "power law (Tang)"
+set power-law-lambda 4.24
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-extinct</metric>
+        <metric>bs-out-final-tick</metric>
+        <metric>bs-out-late-mean-prevalence</metric>
+        <metric>bs-out-tau-sim</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;Lattice4&quot;"></value>
+          <value value="&quot;Ring&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="1001"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="200"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="power-law-lambda">
+          <value value="4.24"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;3000&quot;"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.02" step="0.03" last="0.56"></steppedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="04-threshold-lognormal-Tang" repetitions="8" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "lognormal (Tang)"
+set lognormal-sigma 1
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-extinct</metric>
+        <metric>bs-out-final-tick</metric>
+        <metric>bs-out-late-mean-prevalence</metric>
+        <metric>bs-out-tau-sim</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;Lattice4&quot;"></value>
+          <value value="&quot;Ring&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="1001"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="200"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="lognormal-sigma">
+          <value value="1"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;3000&quot;"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.02" step="0.03" last="0.56"></steppedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="05-baseline-empirical-threshold-ER" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "exponential"
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-extinct</metric>
+        <metric>bs-out-final-tick</metric>
+        <metric>bs-out-late-mean-prevalence</metric>
+        <metric>bs-out-tau-sim</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;other&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="network-type">
+          <value value="&quot;Erdos-Renyi (random)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="2000"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;10000&quot;"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"></steppedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="06-baseline-ER-power-law-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "power law (Tang)"
+set power-law-lambda 4.24
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-extinct</metric>
+        <metric>bs-out-final-tick</metric>
+        <metric>bs-out-late-mean-prevalence</metric>
+        <metric>bs-out-tau-sim</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;other&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="network-type">
+          <value value="&quot;Erdos-Renyi (random)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="2000"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="power-law-lambda">
+          <value value="4.24"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;10000&quot;"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"></steppedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="07-baseline-ER-lognormal-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
+      <setup>set bs-collect-metrics? true
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+set recovery-distribution "lognormal (Tang)"
+set lognormal-sigma 1
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-extinct</metric>
+        <metric>bs-out-final-tick</metric>
+        <metric>bs-out-late-mean-prevalence</metric>
+        <metric>bs-out-tau-sim</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;other&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="network-type">
+          <value value="&quot;Erdos-Renyi (random)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="10001"></value>
+          <value value="10002"></value>
+          <value value="10003"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="2000"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="lognormal-sigma">
+          <value value="1"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;10000&quot;"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"></steppedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="08-dynamics-trajectory-ER" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="true">
+      <setup>set bs-collect-metrics? false
+set bs-prev-samples []
+set immunization-strategy "none"
+set immunized-fraction 0
+setup</setup>
+      <go>go</go>
+      <exitCondition><![CDATA[(ticks >= sim-tick-limit) or (not any? turtles with [state = "infected"])]]></exitCondition>
+      <metrics>
+        <metric>bs-out-prev-grp</metric>
+        <metric>bs-out-prev-mf</metric>
+        <metric>bs-out-count-S</metric>
+        <metric>bs-out-count-I</metric>
+        <metric>bs-out-mean-degree</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="interconnection-structure">
+          <value value="&quot;other&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="network-type">
+          <value value="&quot;Erdos-Renyi (random)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="expt-seed">
+          <value value="10001"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="num-nodes">
+          <value value="2000"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="avg-degree">
+          <value value="6"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="rewiring-prob">
+          <value value="0.07"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-mean">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-distribution">
+          <value value="&quot;exponential&quot;"></value>
+          <value value="&quot;power law (Tang)&quot;"></value>
+          <value value="&quot;lognormal (Tang)&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="power-law-lambda">
+          <value value="4.24"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="lognormal-sigma">
+          <value value="1"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="max-ticks">
+          <value value="&quot;10000&quot;"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="infection-prob">
+          <value value="0.026"></value>
+          <value value="0.028"></value>
+          <value value="0.036"></value>
+        </enumeratedValueSet>
+      </constants>
+    </experiment>
+  </experiments>
+</model>
