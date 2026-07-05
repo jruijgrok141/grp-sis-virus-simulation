@@ -33,7 +33,7 @@ Outputs such as exported edge lists are intended to support comparisons against 
 
 ## Submission (IM1312)
 
-The **deliverable folder** is `oplevering/`. Regenerate the report PDF and submission bundle from the repo root:
+The **deliverable folder** is `oplevering/` (local / OU portal; **not** on GitHub — contains student number). The public `report/report.pdf` omits the student number. Regenerate the report PDF and submission bundle from the repo root:
 
 ```text
 py -3 scripts/build_full_report.py

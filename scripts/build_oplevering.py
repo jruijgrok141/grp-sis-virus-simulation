@@ -135,9 +135,47 @@ def _copy_tree(src: Path, dst: Path, *, ignore=None) -> None:
     shutil.copytree(src, dst, ignore=ignore)
 
 
-def _ignore_pycache(_dir: str, names: list[str]) -> set[str]:
-    skip = {n for n in names if n == "__pycache__" or n.endswith(".pyc")}
-    return skip
+def _compile_report_pdf(report_dir: Path) -> int:
+    for _ in range(2):
+        r = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "report.tex"],
+            cwd=str(report_dir),
+            check=False,
+        )
+        if r.returncode != 0:
+            print("pdflatex exit", r.returncode, "in", report_dir, file=sys.stderr)
+            return r.returncode
+    return 0
+
+
+def _build_submission_report(report_dst: Path) -> int:
+    """Build oplevering/report with student number on the title page."""
+    report_src = ROOT / "report"
+    report_dst.mkdir(parents=True, exist_ok=True)
+    _copy_file(report_src / "report.tex", report_dst / "report.tex")
+    for fig in REPORT_FIGURES:
+        src = report_src / fig
+        if not src.is_file():
+            print(f"Warning: missing report figure {fig}", file=sys.stderr)
+        else:
+            _copy_file(src, report_dst / fig)
+    macros = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "write_report_macros.py"),
+            "--dest",
+            str(report_dst / "generated_quantities.tex"),
+            "--student-id",
+        ],
+        cwd=str(ROOT),
+        check=False,
+    )
+    if macros.returncode != 0:
+        return macros.returncode
+    if _compile_report_pdf(report_dst) != 0:
+        return 1
+    print("Wrote", report_dst / "report.pdf", "(with student ID)")
+    return 0
 
 
 def main() -> int:
@@ -156,18 +194,9 @@ def main() -> int:
         shutil.rmtree(DEST)
     DEST.mkdir(parents=True)
 
-    # Report
-    report_src = ROOT / "report"
-    report_dst = DEST / "report"
-    report_dst.mkdir()
-    for name in ("report.pdf", "report.tex", "generated_quantities.tex"):
-        _copy_file(report_src / name, report_dst / name)
-    for fig in REPORT_FIGURES:
-        src = report_src / fig
-        if not src.is_file():
-            print(f"Warning: missing report figure {fig}", file=sys.stderr)
-        else:
-            _copy_file(src, report_dst / fig)
+    # Report (separate PDF with student number; not committed to GitHub)
+    if _build_submission_report(DEST / "report") != 0:
+        return 1
 
     # Proposal (source + PDF + figure; skip LaTeX aux)
     proposal_src = ROOT / "proposal"
@@ -197,6 +226,11 @@ def main() -> int:
     size_mb = sum(f.stat().st_size for f in DEST.rglob("*") if f.is_file()) / (1024 * 1024)
     print(f"Wrote {DEST} ({n_files} files, {size_mb:.1f} MB)")
     return 0
+
+
+def _ignore_pycache(_dir: str, names: list[str]) -> set[str]:
+    skip = {n for n in names if n == "__pycache__" or n.endswith(".pyc")}
+    return skip
 
 
 if __name__ == "__main__":
