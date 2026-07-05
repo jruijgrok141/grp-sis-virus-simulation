@@ -2,7 +2,9 @@
 
 **Student:** Jan Ruijgrok (852796035)  
 **Course:** IM1312 Research Methods for AI, Open University of the Netherlands  
-**Project:** Testing a spectral epidemic threshold for SIS on networks under heavy-tailed recovery
+**Project:** Testing a spectral epidemic threshold for SIS on networks under heavy-tailed recovery  
+**GitHub:** https://github.com/jruijgrok141/grp-sis-virus-simulation  
+**Submission bundle assembled:** 5 July 2026
 
 This folder contains the materials submitted for the research project: the written report,
 the NetLogo agent-based model, Python analysis scripts, simulation outputs, the original
@@ -76,3 +78,5 @@ py -3 scripts/build_oplevering.py
 
 Academic research project (Open University). When reusing the NetLogo model or report figures,
 cite this report and the underlying literature in `references/`.
+
+The report title page date (`\RepReportDate`) and git revision in the PDF are refreshed automatically when you run `scripts/build_full_report.py` (via `write_report_macros.py`).

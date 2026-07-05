@@ -59,12 +59,13 @@ to setup
   ;; preserve globals cleared by clear-all (BS assigns before setup runs)
   let rs expt-seed
   let mt max-ticks
+  let cms? (bs-collect-metrics? = true)
   clear-all
   set-default-shape turtles "dot"
   set expt-seed rs
   set max-ticks mt
+  set bs-collect-metrics? cms?
 
-  ;; bs-collect-metrics? is set in BehaviorSpace experiment setup before setup runs
   set bs-prev-samples []
   set late-window-len 200
   set sim-tick-limit read-from-string max-ticks
@@ -77,6 +78,8 @@ to setup
   build-network
   compute-degrees
   apply-immunization
+  ;; Distinct epidemic trajectory per BehaviorSpace repetition on the same graph draw.
+  if expt-seed > 0 [ random-seed (expt-seed * 100000 + behaviorspace-run-number) ]
   infect-initial-nodes
   update-colors-and-counts
 
@@ -466,7 +469,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to go
-  if not network-built? [ stop ]
+  if (network-built? != true) [ stop ]
   if not any? turtles with [ state = "infected" ] [ stop ]
   if ticks >= sim-tick-limit [ stop ]
 
@@ -479,19 +482,18 @@ to go
 
   update-colors-and-counts
   
-  ;; plotting prevalence: microscopic grp-SIS vs classical mean-field SIS
+  ;; Interface plots only (skip in BehaviorSpace — large speedup headless).
   let total-non-immune (num-susceptible + num-infected)
-  let frac-infected (ifelse-value (total-non-immune = 0) [0] [num-infected / total-non-immune])
+  if (behaviorspace-run-number = 0) [
+    let frac-infected (ifelse-value (total-non-immune = 0) [0] [num-infected / total-non-immune])
+    set-current-plot "Prevalence: grp-SIS vs mean-field"
+    set-current-plot-pen "grp-SIS infected"
+    plot frac-infected
+    set-current-plot-pen "mean-field SIS"
+    plot rho-I-mf
+  ]
 
-  set-current-plot "Prevalence: grp-SIS vs mean-field"
-
-  set-current-plot-pen "grp-SIS infected"
-  plot frac-infected
-
-  set-current-plot-pen "mean-field SIS"
-  plot rho-I-mf
-
-  if bs-collect-metrics? [
+  if (bs-collect-metrics? = true) [
     let p (ifelse-value (total-non-immune = 0) [0] [num-infected / total-non-immune])
     set bs-prev-samples lput p bs-prev-samples
   ]
@@ -1943,7 +1945,7 @@ setup</setup>
         <enumeratedValueSet variable="max-ticks">
           <value value="&quot;10000&quot;"></value>
         </enumeratedValueSet>
-        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"></steppedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"></steppedValueSet>
       </constants>
     </experiment>
     <experiment name="06-baseline-ER-power-law-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
@@ -1996,7 +1998,7 @@ setup</setup>
         <enumeratedValueSet variable="max-ticks">
           <value value="&quot;10000&quot;"></value>
         </enumeratedValueSet>
-        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"></steppedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"></steppedValueSet>
       </constants>
     </experiment>
     <experiment name="07-baseline-ER-lognormal-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
@@ -2049,7 +2051,7 @@ setup</setup>
         <enumeratedValueSet variable="max-ticks">
           <value value="&quot;10000&quot;"></value>
         </enumeratedValueSet>
-        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"></steppedValueSet>
+        <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"></steppedValueSet>
       </constants>
     </experiment>
     <experiment name="08-dynamics-trajectory-ER" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="true">

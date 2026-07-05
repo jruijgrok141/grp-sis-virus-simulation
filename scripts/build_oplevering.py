@@ -13,7 +13,9 @@ Usage (from project root):
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,11 +32,20 @@ REPORT_FIGURES = (
     "fig_er_prevalence_trajectory_bands.png",
 )
 
-README = """# Oplevering — Virus simulation on networks (grp-SIS)
+def _submission_date() -> str:
+    now = datetime.now()
+    return f"{now.day} {now.strftime('%B %Y')}"
+
+
+def _readme_text() -> str:
+    submission_date = _submission_date()
+    return f"""# Oplevering — Virus simulation on networks (grp-SIS)
 
 **Student:** Jan Ruijgrok (852796035)  
 **Course:** IM1312 Research Methods for AI, Open University of the Netherlands  
-**Project:** Testing a spectral epidemic threshold for SIS on networks under heavy-tailed recovery
+**Project:** Testing a spectral epidemic threshold for SIS on networks under heavy-tailed recovery  
+**GitHub:** https://github.com/jruijgrok141/grp-sis-virus-simulation  
+**Submission bundle assembled:** {submission_date}
 
 This folder contains the materials submitted for the research project: the written report,
 the NetLogo agent-based model, Python analysis scripts, simulation outputs, the original
@@ -108,6 +119,8 @@ py -3 scripts/build_oplevering.py
 
 Academic research project (Open University). When reusing the NetLogo model or report figures,
 cite this report and the underlying literature in `references/`.
+
+The report title page date (`\\RepReportDate`) and git revision in the PDF are refreshed automatically when you run `scripts/build_full_report.py` (via `write_report_macros.py`).
 """
 
 
@@ -128,8 +141,15 @@ def _ignore_pycache(_dir: str, names: list[str]) -> set[str]:
 
 
 def main() -> int:
+    print("Refreshing report PDF (macros, figures, date, git hash)...")
+    rebuild = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "build_full_report.py")],
+        cwd=str(ROOT),
+    )
+    if rebuild.returncode != 0:
+        return rebuild.returncode
     if not (ROOT / "report" / "report.pdf").is_file():
-        print("Missing report/report.pdf — run scripts/build_full_report.py first.", file=sys.stderr)
+        print("Missing report/report.pdf after build_full_report.", file=sys.stderr)
         return 1
 
     if DEST.exists():
@@ -171,7 +191,7 @@ def main() -> int:
     _copy_tree(ROOT / "references", DEST / "references")
     _copy_file(ROOT / "requirements.txt", DEST / "requirements.txt")
 
-    (DEST / "README.md").write_text(README, encoding="utf-8")
+    (DEST / "README.md").write_text(_readme_text(), encoding="utf-8")
 
     n_files = sum(1 for _ in DEST.rglob("*") if _.is_file())
     size_mb = sum(f.stat().st_size for f in DEST.rglob("*") if f.is_file()) / (1024 * 1024)

@@ -24,7 +24,7 @@ only if you use a model without embedded experiments.
 \texttt{05}--\texttt{07} (threshold sweeps, three seeds), and \texttt{08} (per-tick trajectory,
 seed \texttt{10001}). Lattice/Ring experiments \texttt{02}--\texttt{04} are optional
 (\texttt{--with-lattice-ring}). After aggregation, \texttt{write_report_macros.py} updates
-\texttt{report/generated_quantities.tex}. Each recovery law uses about $24\times 16\times 3$
+\texttt{report/generated_quantities.tex}. Each recovery law uses about $24\times 20\times 3$
 BehaviorSpace replicates on \texttt{05}--\texttt{07}.
 """
 

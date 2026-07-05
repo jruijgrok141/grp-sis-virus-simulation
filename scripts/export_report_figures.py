@@ -21,6 +21,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Circle, FancyArrowPatch
 from scipy import stats
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -886,48 +887,213 @@ def load_recovery_calibration_from_bs() -> tuple[float, float, float]:
     return mu, lam, sig
 
 
-def plot_recovery_pdfs(out_path: Path) -> None:
-    """Theoretical PDFs for the three laws used in experiments 05--07 (common mean, different variance).
+def _node_color(state: str, *, focal: bool = False) -> str:
+    palette = {
+        "S": "#4daf4a",
+        "I": "#e41a1c",
+        "gray": "#bdbdbd",
+    }
+    base = palette.get(state, "#bdbdbd")
+    if focal:
+        return {"S": "#2d7a2d", "I": "#c0392b"}.get(state, base)
+    return base
 
-    Uses continuous laws with the Tang parameterisation (shifted Pareto tail index ``lambda``,
-    lognormal log-scale ``sigma``) and an exponential with the same mean (continuous analogue of
-    the NetLogo draw before integer rounding).
-    """
+
+def _draw_local_network(
+    ax,
+    *,
+    focal_state: str,
+    neighbor_states: list[str],
+    show_transmission: bool = False,
+    title: str,
+) -> None:
+    """Small star network around a focal node (Tang et al. Fig.~1 style)."""
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.set_xlim(-1.55, 1.55)
+    ax.set_ylim(-1.55, 1.55)
+    angles = np.linspace(0, 2 * np.pi, len(neighbor_states), endpoint=False) + np.pi / 2
+    r = 1.05
+    focal_xy = (0.0, 0.0)
+    node_r = 0.22
+    for ang, nstate in zip(angles, neighbor_states):
+        xy = (r * np.cos(ang), r * np.sin(ang))
+        if show_transmission and nstate == "I" and focal_state == "S":
+            arr = FancyArrowPatch(
+                xy,
+                focal_xy,
+                arrowstyle="-|>",
+                mutation_scale=12,
+                lw=1.8,
+                color="#c0392b",
+                zorder=1,
+            )
+            ax.add_patch(arr)
+        else:
+            ax.plot([xy[0], focal_xy[0]], [xy[1], focal_xy[1]], color="#888888", ls="--", lw=1.2, zorder=0)
+        ax.add_patch(
+            Circle(
+                xy,
+                node_r,
+                facecolor=_node_color(nstate),
+                edgecolor="black",
+                lw=1.0,
+                zorder=2,
+            )
+        )
+        ax.text(xy[0], xy[1], nstate if nstate != "gray" else "", ha="center", va="center", fontsize=11, fontweight="bold", color="white", zorder=3)
+    ax.add_patch(
+        Circle(
+            focal_xy,
+            node_r,
+            facecolor=_node_color(focal_state, focal=True),
+            edgecolor="black",
+            lw=1.4,
+            zorder=4,
+        )
+    )
+    ax.text(0, 0, focal_state, ha="center", va="center", fontsize=12, fontweight="bold", color="white", zorder=5)
+    ax.set_title(title, fontsize=10, pad=6)
+
+
+def _draw_waiting_time_pdf(
+    ax,
+    *,
+    x: np.ndarray,
+    curves: list[tuple[np.ndarray, str, str]],
+    event_t: float = 0.0,
+    ylabel: str,
+    title: str,
+    shade_idx: int = 0,
+    mean_line: float | None = None,
+    xlabel: str = r"time $t$",
+    legend_fontsize: float = 7.5,
+) -> None:
+    ax.set_title(title, fontsize=10, pad=6)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ymax = 0.0
+    for y, label, color in curves:
+        ax.plot(x, y, color=color, lw=2.0, label=label)
+        ymax = max(ymax, float(np.max(y)))
+    if mean_line is not None:
+        ax.axvline(mean_line, color="0.35", ls="--", lw=1.3, label=rf"$\mathbb{{E}}[W]={mean_line:g}$")
+    if event_t > 0:
+        si = min(shade_idx, len(curves) - 1)
+        y_shade = curves[si][0]
+        ax.fill_between(x, 0, y_shade, where=(x <= event_t), color=curves[si][2], alpha=0.18)
+        ax.axvline(event_t, color="0.25", ls=":", lw=1.2)
+        ax.text(event_t + 0.05, ymax * 0.82, rf"$\tau={event_t:g}$", fontsize=9)
+    ax.set_xlim(0, float(x[-1]))
+    ax.set_ylim(0, ymax * 1.12 if ymax > 0 else 1.0)
+    ax.grid(True, alpha=0.25)
+    if len(curves) > 1 or mean_line is not None:
+        ax.legend(loc="upper right", fontsize=legend_fontsize, framealpha=0.9)
+
+
+def plot_grp_sis_process_schematics(out_path: Path) -> None:
+    """Tang et al. (2025) Fig.~1-style schematics with this project's infection/recovery laws."""
     mu, lam, sig = load_recovery_calibration_from_bs()
     lam = max(2.01, lam)
     t0 = mu * (lam - 2.0) / (lam - 1.0)
     alpha = lam - 1.0
     mu_logn = float(np.log(mu) - (sig**2) / 2.0)
 
-    x_max = 45.0
-    x = np.linspace(1e-3, x_max, 3000)
+    beta_demo = 0.35
+    tau_inf = 1.8
+    tau_rec = 4.2
 
-    y_exp = stats.expon.pdf(x, scale=mu)
+    x_inf = np.linspace(0, 8.0, 400)
+    y_inf = beta_demo * np.exp(-beta_demo * x_inf)
+
+    x_rec = np.linspace(1e-3, 45.0, 3000)
+    y_exp = stats.expon.pdf(x_rec, scale=mu)
+    y_pl = stats.pareto.pdf(x_rec, alpha, scale=t0)
+    y_ln = stats.lognorm.pdf(x_rec, s=sig, scale=np.exp(mu_logn))
     var_exp = float(stats.expon.var(scale=mu))
-
-    y_ln = stats.lognorm.pdf(x, s=sig, scale=np.exp(mu_logn))
+    var_pl = float(stats.pareto.var(alpha, scale=t0))
     var_ln = float(stats.lognorm.var(s=sig, scale=np.exp(mu_logn)))
 
-    y_pl = stats.pareto.pdf(x, alpha, scale=t0)
-    var_pl = float(stats.pareto.var(alpha, scale=t0))
+    fig = plt.figure(figsize=(11.5, 6.8))
+    gs = fig.add_gridspec(2, 3, height_ratios=[1, 1], wspace=0.28, hspace=0.42)
 
-    fig, ax = plt.subplots(figsize=(8.2, 5.0))
-    ax.plot(x, y_exp, color="C0", lw=2.0, label=rf"Exponential ($\mathrm{{Var}}={var_exp:.2f}$)")
-    ax.plot(x, y_pl, color="C1", lw=2.0, label=rf"Power law / Pareto ($\mathrm{{Var}}={var_pl:.2f}$)")
-    ax.plot(x, y_ln, color="C2", lw=2.0, label=rf"Lognormal ($\mathrm{{Var}}={var_ln:.2f}$)")
-    ax.axvline(mu, color="0.35", ls="--", lw=1.3, label=rf"common mean $\mathbb{{E}}[W]={mu:g}$")
+    ax_a0 = fig.add_subplot(gs[0, 0])
+    ax_a1 = fig.add_subplot(gs[0, 1])
+    ax_a2 = fig.add_subplot(gs[0, 2])
+    ax_b0 = fig.add_subplot(gs[1, 0])
+    ax_b1 = fig.add_subplot(gs[1, 1])
+    ax_b2 = fig.add_subplot(gs[1, 2])
 
-    ax.set_xlabel(r"recovery time $W$ (ticks; continuous law before rounding)")
-    ax.set_ylabel("probability density $f_W(w)$")
-    ax.set_title(
-        rf"Recovery-time PDFs at fixed mean ($\lambda={lam:g}$, $\sigma={sig:g}$; from BehaviorSpace expts.~05--07)"
+    _draw_local_network(
+        ax_a0,
+        focal_state="S",
+        neighbor_states=["I", "I", "S", "I"],
+        show_transmission=True,
+        title=r"$t=t_0$",
     )
-    ax.set_xlim(0, x_max)
-    ax.set_ylim(0, None)
-    ax.legend(loc="upper right", fontsize=9)
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=160)
+    _draw_waiting_time_pdf(
+        ax_a1,
+        x=x_inf,
+        curves=[(y_inf, rf"$\beta e^{{-{beta_demo:g}t}}$ (memoryless)", "C0")],
+        event_t=tau_inf,
+        ylabel="density",
+        title="Infection waiting time",
+        shade_idx=0,
+    )
+    _draw_local_network(
+        ax_a2,
+        focal_state="I",
+        neighbor_states=["I", "I", "S", "I"],
+        show_transmission=False,
+        title=rf"$t=t_0+\tau$",
+    )
+
+    _draw_local_network(
+        ax_b0,
+        focal_state="I",
+        neighbor_states=["gray", "gray", "gray", "gray"],
+        show_transmission=False,
+        title=r"$t=t_0$",
+    )
+    _draw_waiting_time_pdf(
+        ax_b1,
+        x=x_rec,
+        curves=[
+            (y_exp, rf"Exponential ($\mathrm{{Var}}={var_exp:.2f}$)", "C0"),
+            (y_pl, rf"Power law ($\mathrm{{Var}}={var_pl:.2f}$)", "C1"),
+            (y_ln, rf"Lognormal ($\mathrm{{Var}}={var_ln:.2f}$)", "C2"),
+        ],
+        event_t=tau_rec,
+        ylabel=r"$f_W(w)$",
+        title=rf"Recovery laws ($\lambda={lam:g}$, $\sigma={sig:g}$)",
+        shade_idx=2,
+        mean_line=mu,
+        xlabel=r"recovery time $W$ (ticks)",
+        legend_fontsize=6.5,
+    )
+    _draw_local_network(
+        ax_b2,
+        focal_state="S",
+        neighbor_states=["gray", "gray", "gray", "gray"],
+        show_transmission=False,
+        title=rf"$t=t_0+\tau$",
+    )
+
+    fig.text(0.02, 0.965, "(a) Infection process", fontsize=11, fontweight="bold", va="top")
+    fig.text(
+        0.02,
+        0.475,
+        "(b) Recovery process",
+        fontsize=11,
+        fontweight="bold",
+        va="top",
+    )
+    fig.suptitle(
+        "grp-SIS infection and recovery schematics (adapted from Tang et al., 2025, Fig.~1)",
+        fontsize=12,
+        y=1.02,
+    )
+    fig.savefig(out_path, dpi=170, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -961,7 +1127,7 @@ def main() -> None:
     beta_pred = beta_pred_from_lambda_csv(primary)
 
     plot_er_network(REPORT_DIR / "er_network_example.png", seed=primary)
-    plot_recovery_pdfs(REPORT_DIR / "fig_recovery_pdfs.png")
+    plot_grp_sis_process_schematics(REPORT_DIR / "fig_grp_sis_process_schematics.png")
     plot_survival_curves(beta_pred, REPORT_DIR / "fig_er_survival_vs_beta.png", primary_seed=primary)
     plot_survival_curves_tau(beta_pred, REPORT_DIR / "fig_er_survival_vs_tau.png", primary_seed=primary)
     plot_late_prevalence_vs_beta(

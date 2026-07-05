@@ -17,7 +17,7 @@
 \title{Testing a spectral epidemic threshold for SIS on networks under heavy-tailed recovery}
 \author{Jan Ruijgrok (852796035)\\
   Open University of the Netherlands}
-\date{April 2026}
+\date{\RepReportDate}
 
 \input{generated_quantities.tex}
 
@@ -25,114 +25,61 @@
 \maketitle
 
 \begin{abstract}
-Many infectious diseases do not confer lasting immunity, so infections may die out quickly or persist at low prevalence. Network SIS models often summarise ``control'' using compact rules that link spreading strength, mean infectious period, and connectivity---notably via the leading eigenvalue of the contact structure. Real recovery times can be irregular and right-skewed (\emph{heavy-tailed} in the sense of substantial mass in long infectious periods) even when their average matches a simple reference case; our research asks whether such spectral mean-field thresholds still track outcomes in an explicit agent-based model. We implemented a group-recovery (grp) SIS formulation on Erd\H{o}s--R\'enyi contact networks ($N{=}2000$, mean degree six), exporting edges per graph draw to obtain the spectral reference numerically. Every run starts from $I_0{=}5$ infected agents ($\rho_0{=}0.25\%$). On three independent draws (\texttt{expt-seed} $10001$--$10003$) we ran replicated sweeps of infection strength under exponential, Tang power law ($\lambda_{\mathrm{PL}}{=}4.24$), and Tang lognormal ($\sigma_{\ln}{=}1$) recovery laws with the same mean infectious duration $\mathbb{E}[W]{=}5$ ticks; experiment~\texttt{08} adds per-tick output comparing microscopic prevalence to the homogeneous mean-field curve in the same implementation when extinction does not end runs early. Infection strengths at which half of stochastic replicates still carry the pathogen lie systematically above the mean-field prediction; differences between heavy-tailed and Markovian regimes in where that threshold falls are modest compared to this gap, whereas extinction timing depends more clearly on the recovery law. Overall, the spectral line is a useful conservative guide rather than a sharp critical value here, and heavy tails mainly reshape variability and transients more than they uniformly lower the survival threshold, partly qualifying the hypothesis that long tails alone strongly ease persistence at an unchanged average recovery duration.
+Many infections allow repeat illness after recovery. Network SIS models often predict when outbreaks die out versus persist using a spectral threshold from the contact structure and mean recovery time, usually with memoryless recovery. Heavy-tailed recovery laws (grp-SIS) may alter that picture even when the mean infectious period is held fixed. We test this in a NetLogo grp-SIS agent-based model on Erd\H{o}s--R\'enyi networks with exponential, power-law, and lognormal recovery at common mean duration: the spectral reference was computed from each simulated contact network, and empirical thresholds came from replicated sweeps of infection probability at the level where half of runs remained non-extinct. The empirical threshold consistently exceeded the spectral prediction; shifts between recovery laws were modest and did not uniformly favour heavy tails, while extinction times and prevalence variability showed recovery shape more clearly than threshold location. For similar discrete-time agent-based studies, the spectral threshold is a conservative planning guide rather than a sharp epidemic cutoff.
 \end{abstract}
 
 \noindent\textbf{Keywords:} network epidemiology; SIS model; heavy-tailed recovery; agent-based simulation; spectral threshold; Erd\H{o}s--R\'enyi random graph.
 
-\section*{Notation and symbols}
-\phantomsection
-\addcontentsline{toc}{section}{Notation and symbols}
+\noindent Main symbols are summarised in Table~\ref{tab:notation-cheatsheet}; full notation and NetLogo output names are in Appendix~\ref{app:notation}.
 
-\noindent
-Table~\ref{tab:notation}: main mathematical symbols.\par
-\noindent
-Table~\ref{tab:netlogo-cols}: selected NetLogo/BehaviorSpace output names.
-
-\begin{table}[H]
+\begin{table}[t]
   \centering
   \small
-  \caption{Mathematical notation (discrete-time SIS on an unweighted simple graph unless noted).}
-  \label{tab:notation}
-  \begin{tabularx}{\linewidth}{@{}l X@{}}
+  \caption{Reader's cheat sheet (symbols used in the main text).}
+  \label{tab:notation-cheatsheet}
+  \begin{tabular}{@{}ll@{}}
     \toprule
     \textbf{Symbol} & \textbf{Meaning} \\
     \midrule
-    $N$ & Number of nodes (agents). \\
-    $A$, $A_{ij}$ & Adjacency matrix; $A_{ij}{=}1$ if nodes $i,j$ are neighbours (unweighted graph). \\
-    $\lambda_{\max}$ & Spectral radius (largest eigenvalue of $A$) for the exported contact network. \\
-    $W$ & Random infectious period (recovery time) at the agent level; $\mathbb{E}[W]$ is its mean, fixed across recovery regimes in our comparisons. \\
-    $\beta$ & Per-tick Bernoulli probability of transmission along an edge from an infected agent (NetLogo \emph{infection-prob}); one model tick is one discrete time step. \\
-    $\tau$ & Effective transmission intensity; we use $\tau=\beta\,\mathbb{E}[W]$ (mean per-tick success probability times mean infectious duration in ticks). This matches the scale-free grouping used with continuous-time mean-field thresholds when $\mathbb{E}[W]$ is expressed in the same time units as $\beta$ (Section~\ref{sec:methods}). \\
-    $\tau_c$ & Critical value of $\tau$ in spectral/mean-field theory; often $\tau_c\approx c/\lambda_{\max}$. \\
-    $c$ & Dimensionless prefactor in threshold scaling (mean-field benchmark $c{=}1$). \\
-    $\beta_{\mathrm{pred}}$ & Spectral prediction $\beta_{\mathrm{pred}}=1/(\lambda_{\max}\mathbb{E}[W])$ at $c{=}1$. \\
-    $\tau_{\mathrm{pred}}$ & $\tau_{\mathrm{pred}}=\beta_{\mathrm{pred}}\mathbb{E}[W]=1/\lambda_{\max}$. \\
-    $\hat{\beta}_{\mathrm{surv}\,50}$ & Smallest $\beta$ on the sweep grid for which at least $50\%$ of replicates are not extinct by the time limit (``survival'' threshold). \\
-    $\hat{\tau}_{50}$ & $\hat{\beta}_{\mathrm{surv}\,50}\,\mathbb{E}[W]$. \\
-    $\rho$ & Fraction infected (prevalence among $S{+}I$); microscopic vs.\ mean-field curves in experiment~\texttt{08}. \\
-    $S$, $I$ & Susceptible and infected compartments (SIS). \\
-    $I_0$ & Number of infected agents at $t{=}0$ (\texttt{initial-infected} in NetLogo); here $I_0{=}5$ unless noted. \\
-    $\rho_0$ & Initial prevalence $I_0/N$ (fraction of agents infected at $t{=}0$). \\
+    $\beta$ & Per-tick infection probability along a link (\texttt{infection-prob}). \\
+    $\mathbb{E}[W]$ & Mean recovery time in ticks (fixed at $5$ across laws). \\
+    $\lambda_{\max}$ & Largest eigenvalue of the contact-network adjacency matrix. \\
+    $\beta_{\mathrm{pred}}$ & Spectral prediction $1/(\lambda_{\max}\mathbb{E}[W])$ (mean-field benchmark $c{=}1$). \\
+    $\hat{\beta}_{\mathrm{surv}\,50}$ & Smallest swept $\beta$ with $\ge 50\%$ of runs still non-extinct at the horizon. \\
+    $\tau$ & Effective intensity $\beta\,\mathbb{E}[W]$; compare to $\tau_{\mathrm{pred}}=1/\lambda_{\max}$. \\
     \bottomrule
-  \end{tabularx}
-\end{table}
-
-\begin{table}[H]
-  \centering
-  \small
-  \caption{NetLogo/BehaviorSpace metrics referenced in this report (names follow CSV export conventions).}
-  \label{tab:netlogo-cols}
-  \begin{tabularx}{\linewidth}{@{}l X@{}}
-    \toprule
-    \textbf{Name} & \textbf{Meaning} \\
-    \midrule
-    \texttt{bs-out-extinct} & Run ended in absorption with no infected agents ($1$) vs.\ infection still present at time limit ($0$). \\
-    \texttt{bs-out-final-tick} & Tick at run termination. \\
-    \texttt{bs-out-late-mean-prevalence} & Mean prevalence over a late time window (used in auxiliary persistence checks). \\
-    \texttt{bs-out-prev-grp} / \texttt{bs-out-prev-mf} & Microscopic grp-SIS prevalence vs.\ homogeneous mean-field SIS prevalence (experiment~\texttt{08}). \\
-    \bottomrule
-  \end{tabularx}
+  \end{tabular}
 \end{table}
 
 \section{Introduction}
+\label{sec:introduction}
 
 Many real-world infections do not give permanent immunity. People can be infected, recover, and then become infected again, sometimes multiple times in their life. Examples include common colds, certain sexually transmitted infections, and hospital-acquired infections. A central practical question is: \emph{when does an introduced infection die out quickly, and when can it keep circulating in a population for a long time?} This boundary between die-out and long-term persistence is often called the epidemic (or endemic) threshold.
 
-In a basic SIS (susceptible--infected--susceptible) model on a network, each individual is either healthy and susceptible or currently infected, and recovery is typically assumed to follow a simple, memoryless process. A standard summary of how easily infection can take hold is an \emph{effective transmission} intensity $\tau$ that combines per-contact infection strength with the mean infectious period. Spectral arguments then predict an epidemic (endemic) threshold of the form
-\[
-  \tau_c \approx \frac{c}{\lambda_{\max}},
-\]
-where $\lambda_{\max}$ is the largest eigenvalue of the adjacency matrix and $c$ is a constant. In a homogeneous mean-field limit one often takes $c=1$; on a finite network, in discrete time, and with correlations beyond mean field, the effective $c$ need not be exactly one, but the scaling with $1/\lambda_{\max}$ remains the usual reference. Equivalently, at fixed mean recovery time $\mathbb{E}[W]$, the implied critical \emph{infection probability} is $\beta_c \approx \tau_c/\mathbb{E}[W] \approx c/(\lambda_{\max}\mathbb{E}[W])$. This spectral picture has been widely used and analysed in network epidemiology \cite{Chakrabarti2008,VanMieghem2011,PastorSatorras2015}.
+Network SIS models often summarise how easily infection spreads through an effective transmission intensity $\tau$ that combines per-contact infection strength with the mean infectious period. Spectral arguments predict an epidemic threshold of the form $\tau_c \approx c/\lambda_{\max}$, where $\lambda_{\max}$ is the largest eigenvalue of the adjacency matrix and $c$ is a dimensionless prefactor \cite{Chakrabarti2008,VanMieghem2011,PastorSatorras2015}. At fixed mean recovery time $\mathbb{E}[W]$, the corresponding critical infection probability is $\beta_c \approx c/(\lambda_{\max}\mathbb{E}[W])$. This picture is widely used as a rule of thumb, although finite networks, discrete time, and correlations beyond mean field can shift the effective $c$ away from one.
 
-However, real recovery times are often far from this idealised picture. Tang et al.\ introduce the grp-SIS framework as a generalisation of the basic SIS model, allowing more flexible recovery-time patterns for infected individuals, including heavy-tailed distributions, while keeping the same basic SIS structure of possible reinfection \cite{Tang2025}. Together with other work on SIS models with general or heavy-tailed recovery \cite{Cator2013}, this confirms that the \emph{shape} of the recovery-time distribution can strongly influence dynamics, even when the \emph{mean} recovery time is kept fixed.
+Real recovery times are often non-Markovian. Tang et al.\ introduce grp-SIS as a generalisation of basic SIS that allows flexible recovery-time patterns, including heavy-tailed distributions, while retaining reinfection \cite{Tang2025}. Earlier work on SIS with general infection and cure times likewise shows that recovery-time \emph{shape} can strongly influence dynamics even when the \emph{mean} is fixed \cite{Cator2013}. What remains less clear is whether the simple scaling $\tau_c \approx c/\lambda_{\max}$ (with $c{=}1$ as the usual mean-field benchmark) still describes thresholds well once recovery departs from exponential form. Agent-based simulation on an explicit contact network is a natural way to test that gap: one can observe die-out versus persistence under controlled recovery laws without relying only on mean-field surrogates.
 
-What is much less clear from existing theory is whether the simple scaling $\tau_c \approx c/\lambda_{\max}$ (and the mean-field benchmark $c=1$) still describes the threshold well once we move away from exponential recovery towards more realistic, heavy-tailed recovery times. This question matters for practice because such rules of thumb are sometimes used to judge whether an infection is ``under control'' on a given contact structure. Agent-based modelling (ABM) offers a natural way to explore this gap: by simulating many individuals on an explicit contact network, with realistic recovery-time distributions, we can directly observe whether infections die out or persist under different parameter settings, without relying only on mean-field approximations (i.e., replacing detailed neighbour-to-neighbour correlations with average infection levels in the population).
-
-In this project we therefore use a NetLogo agent-based SIS model on a simple random network (Erd\H{o}s--R\'enyi~\cite{ErdosRenyi1959} with about 2000 nodes and average degree around 6) as a numerical ``laboratory'' (see Figure~\ref{fig:er-network} for an example network). 
-
+In this project we use a NetLogo agent-based grp-SIS model on an Erd\H{o}s--R\'enyi random graph~\cite{ErdosRenyi1959} (about 2000 nodes, average degree around 6) as a numerical ``laboratory'' (Figure~\ref{fig:er-network}). We compare exponential (Markovian) recovery with two Tang et al.\ alternatives at the same mean infectious period $\mathbb{E}[W]{=}5$ ticks: a shifted Pareto / power law and a lognormal law.
 
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=0.6\textwidth]{er_network_example.png}
-  \caption{Induced subgraph on a random subset of nodes from the exported ER edge list (seed $10001$), spring layout for visualisation only; full simulations use all $2000$ nodes. Highlighted nodes illustrate a possible infected set.}
+  \caption{Induced subgraph on a random subset of nodes from the ER contact network (seed $10001$), spring layout for visualisation only; full simulations use all $2000$ nodes. Highlighted nodes illustrate a possible infected set.}
   \label{fig:er-network}
 \end{figure}
 
-Within this setting we compare exponential (Markovian) recovery to two Tang et al.\ laws with higher variance at the same mean: shifted Pareto / power law with shape parameter $\lambda_{\mathrm{PL}}{=}4.24$ (NetLogo \path{power-law-lambda}) and lognormal with $\sigma_{\ln}{=}1$ (\path{lognormal-sigma}), see Figure~\ref{fig:recovery-pdfs}, while keeping $\mathbb{E}[W]{=}5$ ticks. This allows us to test how robust the spectral scaling $\tau_c \approx c/\lambda_{\max}$ remains in an explicit agent-based model and to see whether these alternatives mainly shift the epidemic threshold or primarily affect extinction times and variability.
+The present study sets out to measure how well that spectral mean-field threshold predicts finite-horizon survival in this discrete-time ABM, and whether recovery-law shape shifts the empirical threshold or mainly changes extinction times and variability. Our hypothesis is that recovery laws with long right tails (Tang power-law and lognormal at fixed $\mathbb{E}[W]$ and fixed shape parameters) make it easier for the infection to persist---operationally, to meet the finite-horizon survival criterion in Section~\ref{sec:methods}---than exponential recovery at the same mean infectious period. A related question is whether they also pull the empirical threshold toward the mean-field spectral line $\tau_c \approx 1/\lambda_{\max}$ ($c{=}1$), i.e.\ whether $\hat{\tau}_{50}/\tau_{\mathrm{pred}}$ moves closer to one than under exponential recovery.
+
+Erd\H{o}s--R\'enyi is used here as a \emph{controlled} contact structure, not as a claim that random graphs resemble empirical mixing patterns; Section~\ref{sec:discussion} discusses what this choice does and does not imply for external validity. The study addresses a series of research questions. First, we examine how closely the empirically observed threshold---in infection probability or in $\tau$---agrees with the spectral reference $\tau_c \approx 1/\lambda_{\max}$ under exponential (Markovian) recovery. Second, we determine how that threshold shifts when recovery is replaced by Tang et al.'s power law or lognormal law at the same $\mathbb{E}[W]$. Finally, we ask whether heavy-tailed recovery mainly changes the threshold location or instead shows up in extinction-time distributions and prevalence variability on this fixed topology.
 
 \section{Methods}
 \label{sec:methods}
 
-\subsection*{Problem and research questions}
-
-Our hypothesis is that recovery laws with long right tails (Tang power-law and lognormal at fixed $\mathbb{E}[W]$ and fixed shape parameters as above) make it easier for the infection to persist---operationally, to meet the finite-horizon survival criterion in Section~\ref{sec:methods}---than exponential recovery at the same mean infectious period. A related question is whether they also pull the empirical threshold toward the mean-field spectral line $\tau_c \approx 1/\lambda_{\max}$ ($c{=}1$), i.e.\ whether $\hat{\tau}_{50}/\tau_{\mathrm{pred}}$ moves closer to one than under exponential recovery; Section~\ref{sec:discussion} revisits both parts with the estimates in Section~\ref{sec:results}.
-
-We address the following research questions to test this hypothesis in the agent-based model on Erd\H{o}s--R\'enyi networks with fixed parameters (about 2000 nodes and average degree around 6). Erd\H{o}s--R\'enyi is used here as a \emph{controlled} contact structure, not as a claim that random graphs resemble empirical mixing patterns; Section~\ref{sec:discussion} discusses what this choice does and does not imply for external validity.
+\subsection{Design}
 
 \begin{itemize}[leftmargin=*]
-  \item \textbf{RQ1}. To what extent does the empirically observed threshold---in \emph{infection probability} or in $\tau$ (\emph{infection probability}$\times$\emph{mean recovery time})---agree with the spectral reference $\tau_c \approx c/\lambda_{\max}$ under the mean-field benchmark $c=1$, for an exponential (Markovian) recovery distribution?
-  \item \textbf{RQ2}. How does the empirical threshold shift when the recovery distribution is replaced by Tang et al.'s power law or lognormal recovery, while keeping $\mathbb{E}[W]$ fixed?
-  \item \textbf{RQ3}. On this Erd\H{o}s--R\'enyi topology (fixed \emph{number of nodes} and \emph{average degree}), does recovery under the Tang power-law or lognormal laws lead to a systematically different empirical threshold (in terms of infection probability) compared to exponential recovery, or are differences mainly visible in extinction-time distributions and prevalence variability?
-\end{itemize}
-
-\paragraph{Operationalisation (summary).}
-Each research question is tied to simulation outputs in \path{output/raw/} and aggregated CSVs: \textbf{RQ1} compares $\hat{\beta}_{\mathrm{surv}\,50}$ and $\hat{\tau}_{50}$ to $\beta_{\mathrm{pred}}$ and $\tau_{\mathrm{pred}}$ under exponential recovery (same $I_0$, graph, and horizon as other laws). \textbf{RQ2} repeats the comparison for power-law and lognormal regimes at identical $\mathbb{E}[W]$, $\lambda_{\max}$, and sweep design. \textbf{RQ3} contrasts not only $\hat{\beta}_{\mathrm{surv}\,50}$ but also \texttt{bs-out-final-tick} and prevalence series (experiments~\texttt{05}--\texttt{08}) to separate threshold location from transient and variability effects.
-
-\subsection*{Research setup}
-
-\begin{itemize}[leftmargin=*]
-  \item \textbf{Simulated world}. Individuals are nodes on an Erd\H{o}s--R\'enyi graph~\cite{ErdosRenyi1959} generated in NetLogo with about \emph{number of nodes}${}=2000$ and \emph{average degree}${}=6$. Experiments \texttt{05}--\texttt{07} enumerate three independent draws via \texttt{expt-seed}${}\in\{10001,10002,10003\}$ (with matching \path{output/edges/edges_ER_<seed>.csv} from experiment~\texttt{01}); for each draw, exponential, power-law, and lognormal recovery use the \emph{same} contacts. BehaviorSpace \texttt{repetitions} supply process noise conditional on each graph.
+  \item \textbf{Simulated world}. Individuals are nodes on an Erd\H{o}s--R\'enyi graph~\cite{ErdosRenyi1959} generated in NetLogo with about \emph{number of nodes}${}=2000$ and \emph{average degree}${}=6$. Experiments \texttt{05}--\texttt{07} enumerate three independent draws via \texttt{expt-seed}${}\in\{10001,10002,10003\}$; for each draw, exponential, power-law, and lognormal recovery use the \emph{same} contacts. BehaviorSpace \texttt{repetitions} supply process noise conditional on each graph.
 
   \item \textbf{Initial condition}. At $t{=}0$, exactly $I_0{=}5$ agents are infected (\texttt{initial-infected}${}=5$), so $\rho_0=I_0/N=0.25\%$. This seeds a small local outbreak rather than a high-prevalence state, so the estimated survival thresholds are not dominated by a deliberately large initial reservoir of infection. Finite-$N$ SIS dynamics can still depend on $I_0$ (e.g.\ early extinction risk); we hold $I_0$ fixed across recovery laws and do not perform an $I_0$ sensitivity sweep in this report.
 
@@ -142,58 +89,53 @@ Each research question is tied to simulation outputs in \path{output/raw/} and a
 
   \item \textbf{What we keep fixed}. The graph, the generative specification (ER, \emph{number of nodes}, \emph{average degree}), and the \emph{mean recovery time}, so comparisons between recovery regimes are fair at the same $\mathbb{E}[W]$.
 
-  \item \textbf{Reference prediction from the network}. The contact list is exported to a CSV file. In Python (3.x; numerical work uses the project scripts under \path{scripts/}), we compute the largest eigenvalue $\lambda_{\max}$ of the adjacency matrix. The mean-field spectral reference is $\tau_c \approx 1/\lambda_{\max}$ (i.e.\ $c=1$ in $\tau_c \approx c/\lambda_{\max}$). At fixed mean recovery time $\mathbb{E}[W]$, the corresponding critical \emph{infection probability} is $\beta_{\mathrm{pred}} = 1/(\lambda_{\max}\,\mathbb{E}[W])$, which marks the spectral prediction on the $\beta$ axis.
+  \item \textbf{Reference prediction from the network}. From the adjacency matrix of each contact network we compute the largest eigenvalue $\lambda_{\max}$. The mean-field spectral reference is $\tau_c \approx 1/\lambda_{\max}$ (i.e.\ $c=1$ in $\tau_c \approx c/\lambda_{\max}$). At fixed mean recovery time $\mathbb{E}[W]$, the corresponding critical \emph{infection probability} is $\beta_{\mathrm{pred}} = 1/(\lambda_{\max}\,\mathbb{E}[W])$, which marks the spectral prediction on the $\beta$ axis.
 \end{itemize}
 
-\subsection*{Measurement, empirical threshold rule, and estimation protocol}
+We compare spectral predictions to $\hat{\beta}_{\mathrm{surv}\,50}$ and $\hat{\tau}_{50}$ under exponential recovery, repeat the comparison for power-law and lognormal recovery at identical $\mathbb{E}[W]$ and sweep design, and use extinction times and prevalence series (experiments~\texttt{05}--\texttt{08}) to separate threshold location from transient behaviour.
+
+\subsection{Procedure and measurement}
 
 \begin{itemize}[leftmargin=*]
-  \item \textbf{Run outcome}. Each BehaviorSpace run ends when an infection-free absorbing state is reached or when simulated time reaches a configured cap (\texttt{max-ticks}, here $10{,}000$ for experiments \texttt{05}--\texttt{07}). We record whether the run is classified extinct (\texttt{bs-out-extinct}${}=1$), the final tick, and late-window mean prevalence (\texttt{bs-out-late-mean-prevalence}) for auxiliary persistence checks. Simulations use NetLogo~7.0.3 (BehaviorSpace table exports in \path{output/raw/}).
+  \item \textbf{Run outcome}. Each BehaviorSpace run ends when an infection-free absorbing state is reached or when simulated time reaches a configured cap (\texttt{max-ticks}, here $10{,}000$ for experiments \texttt{05}--\texttt{07}). We record whether the run is classified extinct (\texttt{bs-out-extinct}${}=1$), the final tick, and late-window mean prevalence (\texttt{bs-out-late-mean-prevalence}) for auxiliary persistence checks. Simulations use NetLogo~7.0.3.
 
   \item \textbf{Persistence vs.\ extinction at the horizon}. A replicate counts as \emph{surviving} (still persistent at the horizon) if \texttt{bs-out-extinct}${}=0$, i.e.\ at least one infected agent remains when the run stops at \texttt{max-ticks} or absorption; otherwise it is \emph{extinct}. This replaces informal wording such as ``typically stays present'': persistence is \textbf{binary} per replicate at the configured tick cap (\texttt{max-ticks}${}=10{,}000$ for experiments \texttt{05}--\texttt{07}), \textbf{not} a quasi-stationary prevalence level. The $50\%$ survival threshold $\hat{\beta}_{\mathrm{surv}\,50}$ is the smallest swept $\beta$ at which at least half of the $24$ replicates survive under this rule.
 
-  \item \textbf{Design size and sweep schedule}. For each recovery regime, experiments \texttt{05}--\texttt{07} use \texttt{repetitions}${}=24$ per $(\beta,\text{regime},\texttt{expt-seed})$ and a uniform stepped sweep of \texttt{infection-prob} from $0.018$ to $0.048$ in steps of $0.002$ ($16$ values). With three independent ER draws per law this is $24\times 16\times 3=1{,}152$ stochastic runs per recovery law unless runs fail validation. The same schedule is applied in all three recovery laws so that differences are not confounded by replication count or seed list.
+  \item \textbf{Design size and sweep schedule}. For each recovery regime, experiments \texttt{05}--\texttt{07} use \texttt{repetitions}${}=24$ per $(\beta,\text{regime},\texttt{expt-seed})$ and a uniform stepped sweep of \texttt{infection-prob} from $0.018$ to $0.056$ in steps of $0.002$ ($20$ values). With three independent ER draws per law this is $24\times 20\times 3=1{,}440$ stochastic runs per recovery law unless runs fail validation. The same schedule is applied in all three recovery laws so that differences are not confounded by replication count or seed list.
 
-  \item \textbf{Grid-based $50\%$ survival threshold $\hat{\beta}_{\mathrm{surv}\,50}$}. For each $\beta$ on the grid, the \emph{survival rate} is the fraction of replicates with \texttt{bs-out-extinct}${}<0.5$. We define $\hat{\beta}_{\mathrm{surv}\,50}$ as the \emph{smallest} $\beta$ on the grid at which this fraction is at least $50\%$, implemented in \path{scripts/threshold_estimators.py}. If the curve never reaches $50\%$ below the largest $\beta$, the estimator equals the largest grid point (right-censoring). The sweep uses a \emph{uniform} step ($\Delta\beta=0.002$); a coarse-to-fine refinement around an estimated crossing (or a logistic dose--response fit to survival vs.\ $\beta$) would reduce discretisation error when the crossing lies between grid points or at the boundary. Stratified bootstrap confidence intervals ($n{=}400$ resamples over the $\beta$ grid, stratifying by $\beta$) use the same rule.
+  \item \textbf{Grid-based $50\%$ survival threshold $\hat{\beta}_{\mathrm{surv}\,50}$}. For each $\beta$ on the grid, the \emph{survival rate} is the fraction of replicates with \texttt{bs-out-extinct}${}<0.5$. We define $\hat{\beta}_{\mathrm{surv}\,50}$ as the \emph{smallest} $\beta$ on the grid at which this fraction is at least $50\%$. If the curve never reaches $50\%$ below the largest $\beta$, the estimator equals the largest grid point (right-censoring). The sweep uses a \emph{uniform} step ($\Delta\beta=0.002$); a coarse-to-fine refinement around an estimated crossing (or a logistic dose--response fit to survival vs.\ $\beta$) would reduce discretisation error when the crossing lies between grid points or at the boundary. Stratified bootstrap confidence intervals ($n{=}400$ resamples over the $\beta$ grid, stratifying by $\beta$) use the same rule.
 
-  \item \textbf{Uncertainty reporting}. Bootstrap intervals reflect stochastic replicate noise conditional on a fixed \texttt{expt-seed}. Cross-seed variation in $\hat{\beta}_{\mathrm{surv}\,50}$ (and in extinction-time curves) is summarised separately by comparing the three ER instances; \path{output/threshold_ratio_by_run.csv} lists one row per (recovery regime, seed).
+  \item \textbf{Uncertainty reporting}. Bootstrap intervals reflect stochastic replicate noise conditional on a fixed \texttt{expt-seed}. Cross-seed variation in $\hat{\beta}_{\mathrm{surv}\,50}$ (and in extinction-time curves) is summarised separately by comparing the three ER instances (Table~\ref{tab:thresholds-seeds}, Figures~\ref{fig:ratio-seeds} and~\ref{fig:extinct-beta-seed}).
 
   \item \textbf{Effective transmission}. We report $\hat{\tau}_{50}=\hat{\beta}_{\mathrm{surv}\,50}\,\mathbb{E}[W]$ and compare $\hat{\tau}_{50}/\tau_{\mathrm{pred}}$ to the mean-field benchmark $c{=}1$.
-
-  \item \textbf{Link to RQ1--RQ3}. \textbf{RQ1}: agreement between $\hat{\beta}_{\mathrm{surv}\,50}$ and $\beta_{\mathrm{pred}}$ under exponential recovery. \textbf{RQ2}: shifts under power-law and lognormal recovery at fixed $\mathbb{E}[W]$. \textbf{RQ3}: extinction-time and variability differences even when $\hat{\beta}_{\mathrm{surv}\,50}$ is similar.
 \end{itemize}
 
-\paragraph{Discrete-time infection probability and continuous-time $\tau$.}
-In the NetLogo implementation, one \emph{tick} is one discrete time step; \emph{infection-prob} is the Bernoulli probability that an infected agent transmits to a given susceptible neighbour along an existing edge during that tick (see \path{netlogo/virus_simulation.nlogox}). Continuous-time network SIS theory often expresses thresholds through pairwise transmission and recovery \emph{rates} \cite{VanMieghem2011,PastorSatorras2015}. With time step $\Delta t=1$ in tick units, a common small-probability link is $\beta \approx 1-e^{-\nu \Delta t}$ for an underlying per-edge rate $\nu$; for the $\beta$ values here, $\beta$ is therefore close to such a $\nu$ in numerical magnitude, but the simulation remains genuinely discrete. Holding the mean infectious duration $\mathbb{E}[W]$ in ticks fixed across recovery laws, we report $\tau=\beta\,\mathbb{E}[W]$ as the discrete analogue of ``per-contact success per tick $\times$ mean infectious ticks'' used alongside the spectral reference $\tau_{\mathrm{pred}}=1/\lambda_{\max}$. Comparisons to $\tau_c\approx 1/\lambda_{\max}$ should be read as \emph{benchmarking} a continuous-time mean-field scale against a discrete microscopic model, not as claiming equality with a specific continuous-time critical point.
+\subsection{Recovery laws}
 
-\subsection*{grp-SIS recovery times in the agent-based model}
-
-Each infected agent draws an integer recovery deadline $W\ge 1$ (ticks) from \texttt{draw-recovery-time} at infection; the agent recovers when the infection clock reaches that deadline (\texttt{recovery-step} in \path{netlogo/virus_simulation.nlogox}). Exponential draws use a geometric waiting time with mean \texttt{recovery-mean}${}=5$. Lognormal (Tang) draws use \texttt{lognormal-sigma}${}=1$ with scale chosen so the theoretical mean matches \texttt{recovery-mean}. Power law (Tang) draws use shifted Pareto shape \texttt{power-law-lambda}${}=4.24$ with scale set for the same mean via the Tang parameterisation. All draws are rounded to integer ticks and truncated below at one tick, so $\mathbb{E}[W]$ in the simulation matches the intended mean up to discretisation; the two Tang laws have strictly larger variance than the exponential reference at this common mean (Figure~\ref{fig:recovery-pdfs}).
+Figure~\ref{fig:grp-sis-schematics} adapts the schematic of Tang et al.\ \cite{Tang2025} (their Fig.~1): panel~(a) shows the \emph{memoryless} infection step used in NetLogo (each tick, transmission along an edge succeeds with probability $\beta$; the continuous analogue is an exponential waiting-time density $\beta e^{-\beta t}$), and panel~(b) shows the \emph{general} recovery step where an infected agent draws a deadline $W$ from one of the three laws below. Red/green nodes are infected/susceptible; dashed edges are contacts that do not participate in the focal event; solid arrows in~(a) indicate possible transmission to the central susceptible node.
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.92\textwidth]{fig_recovery_pdfs.png}
-  \caption{Probability density functions of the \emph{continuous} recovery laws corresponding to the three regimes in BehaviorSpace experiments~\texttt{05}--\texttt{07} (same \texttt{recovery-mean}, \texttt{power-law-lambda}, and \texttt{lognormal-sigma} as in \protect\path{netlogo/behaviorspace_experiments.xml}). All three satisfy $\mathbb{E}[W]=5$; the variances (legend) differ, with the heavy-tailed laws spreading mass toward longer infectious periods. The exponential curve is the continuous-time Markovian reference with rate $1/\mathbb{E}[W]$ (the implementation samples a continuous draw and rounds to ticks, as in \protect\path{netlogo/virus_simulation.nlogox}).}
-  \label{fig:recovery-pdfs}
+  \includegraphics[width=0.98\textwidth]{fig_grp_sis_process_schematics.png}
+  \caption{Grp-SIS schematic (after Tang et al., 2025, Fig.~1). \textbf{(a)} Memoryless infection per tick (probability $\beta$). \textbf{(b)} Three recovery laws at common mean $\mathbb{E}[W]{=}5$ ticks: exponential, Tang power law, Tang lognormal.}
+  \label{fig:grp-sis-schematics}
 \end{figure}
 
-\paragraph{Procedure (per new infection).}
-\texttt{draw-recovery-time} in NetLogo: read regime from the chooser; if exponential, sample a geometric duration with the configured mean; if lognormal (Tang), sample from the lognormal with fixed $\sigma$ and scale set so the theoretical mean matches \texttt{recovery-mean}; if power law (Tang), sample from the shifted Pareto with fixed shape and scale set for the same mean; round to integer ticks, replace any value below $1$ by $1$; store the draw as the agent's recovery countdown and decrement it once per tick until recovery. The BehaviorSpace sweep holds \texttt{recovery-mean} and regime-specific shape parameters fixed while stepping \texttt{infection-prob}; each $(\beta,\text{regime})$ cell uses \texttt{repetitions}${}=24$ independent stochastic replicates (estimation protocol above).
 
-\subsection*{Software and reproducibility}
+Each infected agent draws an integer recovery deadline $W\ge 1$ (ticks) from \texttt{draw-recovery-time} at infection. Exponential draws use a geometric waiting time with mean \texttt{recovery-mean}${}=5$; Tang lognormal and power-law draws use \texttt{lognormal-sigma}${=}1$ and \texttt{power-law-lambda}${=}4.24$ with scales set for the same mean. At this common mean, lognormal recovery has the highest variance and the power law a distinct peaked shape (Figure~\ref{fig:grp-sis-schematics}, panel~(b)). Full draw rules and the discrete-time mapping to continuous $\tau$ are in Appendix~\ref{app:notation}.
 
-NetLogo~7 BehaviorSpace experiments are defined in \path{netlogo/behaviorspace_experiments.xml} (mirrored in the model file). From the project root:
-\begin{itemize}[leftmargin=*]
-  \item \texttt{python}~\path{scripts/run_pipeline.py}~\texttt{--all} runs the ER-focused set: \texttt{01} (export \path{output/edges/edges_ER_<seed>.csv} only), threshold experiments \texttt{05}--\texttt{07}, and \texttt{08-dynamics-trajectory-ER} (per-tick prevalence, seed \texttt{10001}). Pass \texttt{--with-lattice-ring} to add exploratory \texttt{02}--\texttt{04} on Lattice4/Ring.
-  \item Aggregation writes \path{output/empirical_thresholds.csv} and refreshes \path{report/generated_quantities.tex} unless \texttt{--no-report-macros} is set.
-  \item Regenerate figures and \texttt{report.pdf} in one step with \texttt{python}~\path{scripts/build_full_report.py} after the pipeline (requires \texttt{matplotlib}; \texttt{networkx} is optional for the network schematic).
-\end{itemize}
+\subsection{Data analysis and reproducibility}
+
+Spectral quantities ($\lambda_{\max}$, $\beta_{\mathrm{pred}}$, heterogeneous mean-field references) were computed from the adjacency matrix of each ER draw. Survival curves, $\hat{\beta}_{\mathrm{surv}\,50}$, and bootstrap intervals were obtained from BehaviorSpace outputs by applying the grid rule above. Figures aggregate replicate-level outcomes by recovery regime, $\beta$, and \texttt{expt-seed}. BehaviorSpace repetitions use independent epidemic trajectories on a fixed graph draw (\texttt{random-seed} re-draw after network construction). Experiment definitions and parameter sweeps are listed in Appendix~\ref{app:behaviorspace}; simulation outputs and analysis code are available in the project repository (Section~\ref{sec:data-availability}).
 
 \section{Results}
 \label{sec:results}
 
-\subsection{Spectral and mean-field references on the exported ER graph}
-For the primary ER instance (\texttt{expt-seed}${}=\RepPrimarySeed$, $N=\RepNumNodes$, \RepNumEdges{} undirected edges on the exported list, mean degree $\langle k\rangle\approx \RepKmean$), Python gives $\lambda_{\max}\approx \RepLambdaMax$ (see \path{output/lambda_max.csv}). With $\mathbb{E}[W]=5$ ticks,
+\subsection{Overview}
+On Erd\H{o}s--R\'enyi graphs with about $2000$ nodes and mean degree $\approx 6$, the infection strength at which half of simulation runs are still non-extinct at tick $10{,}000$ lies clearly \emph{above} the spectral prediction $\beta_{\mathrm{pred}}$ for all three recovery laws and all three independent graph draws (ratio range $\RepRatioGlobalMin$--$\RepRatioGlobalMax$). The hypothesis that heavy-tailed recovery uniformly lowers this threshold is \emph{not} supported: power-law recovery crosses $50\%$ survival at the lowest $\beta$, exponential is intermediate, and lognormal is highest. Recovery shape shows up more clearly in \emph{how long} extinct outbreaks last than in a shared shift toward $\beta_{\mathrm{pred}}$. The subsections below first establish the spectral reference, then report survival thresholds and recovery-law shifts, and finally examine extinction times and prevalence dynamics.
+
+\subsection{Spectral and mean-field references on the ER contact network}
+For the primary ER instance (\texttt{expt-seed}${}=\RepPrimarySeed$, $N=\RepNumNodes$, \RepNumEdges{} undirected edges, mean degree $\langle k\rangle\approx \RepKmean$), we obtain $\lambda_{\max}\approx \RepLambdaMax$. With $\mathbb{E}[W]=5$ ticks,
 \[
   \beta_{\mathrm{pred}} = \frac{1}{\lambda_{\max}\,\mathbb{E}[W]} \approx \RepBetaPred, \qquad
   \tau_{\mathrm{pred}} = \beta_{\mathrm{pred}}\,\mathbb{E}[W] = \frac{1}{\lambda_{\max}} \approx \RepTauPred.
@@ -206,10 +148,10 @@ The same edge list implies a second-moment heterogeneous mean-field scale
   \qquad
   \beta_{\mathrm{het}}=\frac{\tau_{\mathrm{het}}}{\mathbb{E}[W]}\approx \RepBetaHet
 \]
-\cite{PastorSatorras2015}. On this instance $\beta_{\mathrm{het}}$ exceeds $\beta_{\mathrm{pred}}$ by only about $\RepBetaHetPctAbove\%$, whereas the empirical survival thresholds in Table~\ref{tab:thresholds} lie far above \emph{both} references. Thus the large gap between $\hat{\beta}_{\mathrm{surv}\,50}$ and $\beta_{\mathrm{pred}}$ is not resolved simply by switching from spectral to degree-based mean-field surrogates on the same network.
+\cite{PastorSatorras2015}. On this instance $\beta_{\mathrm{het}}$ exceeds $\beta_{\mathrm{pred}}$ by only about $\RepBetaHetPctAbove\%$, whereas the empirical survival thresholds in Table~\ref{tab:thresholds} lie far above \emph{both} references. Thus the large gap between $\hat{\beta}_{\mathrm{surv}\,50}$ and $\beta_{\mathrm{pred}}$ is not resolved simply by switching from spectral to degree-based mean-field surrogates on the same network. On the primary graph, $\beta_{\mathrm{pred}}\approx\RepBetaPred$ while empirical $50\%$ survival thresholds in Table~\ref{tab:thresholds} lie near $1.6$--$1.8\times$ higher; heterogeneous mean-field $\beta_{\mathrm{het}}$ moves only slightly and does not close that gap.
 
 \subsection{Survival curves and empirical thresholds}
-BehaviorSpace experiments \texttt{05}--\texttt{07} sweep $\beta$ from $0.018$ to $0.048$ in steps of $0.002$ with repetitions per $(\beta,\text{regime})$. Figure~\ref{fig:survival} shows the estimated fraction of runs that are not extinct at the time limit, as a function of $\beta$, for the three recovery regimes on the ER baseline. The vertical line marks $\beta_{\mathrm{pred}}$: all three curves are already at high survival well to the right of this line, so the mean-field benchmark is conservative relative to the discrete-time ABM on this network.
+BehaviorSpace experiments \texttt{05}--\texttt{07} sweep $\beta$ from $0.018$ to $0.056$ in steps of $0.002$ with repetitions per $(\beta,\text{regime})$. Figure~\ref{fig:survival} shows the estimated fraction of runs that are not extinct at the time limit, as a function of $\beta$, for the three recovery regimes on the ER baseline. The vertical line marks $\beta_{\mathrm{pred}}$: all three curves are already at high survival well to the right of this line, so the mean-field benchmark is conservative relative to the discrete-time ABM on this network.
 
 \begin{figure}[htbp]
   \centering
@@ -218,16 +160,9 @@ BehaviorSpace experiments \texttt{05}--\texttt{07} sweep $\beta$ from $0.018$ to
   \label{fig:survival}
 \end{figure}
 
-Figure~\ref{fig:survival-tau} shows the same survival estimates against $\tau=\beta\,\mathbb{E}[W]$ with $\tau_{\mathrm{pred}}=1/\lambda_{\max}$ (\textbf{RQ1}).
+At fixed $\mathbb{E}[W]$, the same pattern holds in $\tau$-space ($\tau=\beta\,\mathbb{E}[W]$, reference $\tau_{\mathrm{pred}}=1/\lambda_{\max}$) because the horizontal axis is a linear rescaling of $\beta$.
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.85\linewidth]{fig_er_survival_vs_tau.png}
-  \caption{ER seed \RepPrimarySeed: fraction surviving vs.\ $\tau=\beta\,\mathbb{E}[W]$ ($\mathbb{E}[W]{=}5$ ticks). Dashed vertical line: $\tau_{\mathrm{pred}}$; dotted horizontal: 50\% survival.}
-  \label{fig:survival-tau}
-\end{figure}
-
-Figure~\ref{fig:late-prev} complements the survival curves with \texttt{bs-out-late-mean-prevalence} on runs that are not extinct at the horizon (proposal: persistence / late-window prevalence vs.\ $\beta$). This separates \textbf{RQ2} threshold shifts from \textbf{RQ3} variability in endemic levels among persisting runs. Values require a fresh export of experiments~\texttt{05}--\texttt{07} after the NetLogo fix that preserves \texttt{bs-collect-metrics?} through \texttt{setup}.
+Figure~\ref{fig:late-prev} complements the survival curves with \texttt{bs-out-late-mean-prevalence} on runs that are not extinct at the horizon, separating threshold shifts from variability in endemic levels among persisting runs.
 
 \begin{figure}[htbp]
   \centering
@@ -236,12 +171,12 @@ Figure~\ref{fig:late-prev} complements the survival curves with \texttt{bs-out-l
   \label{fig:late-prev}
 \end{figure}
 
-Table~\ref{tab:thresholds} summarises $\hat{\beta}_{\mathrm{surv}\,50}$, bootstrap uncertainty, and $\hat{\beta}/\beta_{\mathrm{pred}}$ from \path{output/empirical_thresholds.csv} (primary seed~\RepPrimarySeed). Exponential and lognormal estimates in this run set sit at the largest $\beta$ on the grid ($\RepBetaGridMax$): the survival curve crosses $50\%$ at or beyond the last point, so $\hat{\beta}_{\mathrm{surv}\,50}$ is \emph{right-censored} (ratios $\RepThExpRatio$ and $\RepThLognRatio$). Where the estimator sits on the boundary, the bootstrap interval often collapses to a point (Table~\ref{tab:thresholds}, footnote). Tang power-law recovery yields a lower crossing at $\hat{\beta}_{\mathrm{surv}\,50}=\RepThPLHat{}$ ($\approx \RepThPLRatio\,\beta_{\mathrm{pred}}$), the regime for which the $50\%$ point lies strictly inside the grid here.
+Table~\ref{tab:thresholds} summarises $\hat{\beta}_{\mathrm{surv}\,50}$, bootstrap uncertainty, and $\hat{\beta}/\beta_{\mathrm{pred}}$ on the primary seed~\RepPrimarySeed. On this draw all three recovery laws cross the $50\%$ survival rule \emph{inside} the sweep ($\beta\le\RepBetaGridMax$): Tang power-law recovery is lowest at $\hat{\beta}_{\mathrm{surv}\,50}=\RepThPLHat{}$ ($\approx\RepThPLRatio\,\beta_{\mathrm{pred}}$), exponential at $\RepThExpHat{}$ ($\approx\RepThExpRatio\,\beta_{\mathrm{pred}}$), and lognormal highest at $\RepThLognHat{}$ ($\approx\RepThLognRatio\,\beta_{\mathrm{pred}}$). Bootstrap intervals in Table~\ref{tab:thresholds} are non-degenerate for these crossings.
 
 \begin{table}[htbp]
   \centering
   \small
-  \caption{Empirical survival threshold $\hat{\beta}_{\mathrm{surv}\,50}$ on the ER baseline (seed \RepPrimarySeed), with $\beta_{\mathrm{pred}}=\RepBetaPred$. Bootstrap $n=400$ (stratified over the $\beta$ grid). Median \texttt{bs-out-final-tick} among extinct runs.}
+  \caption{Empirical survival threshold $\hat{\beta}_{\mathrm{surv}\,50}$ on the ER baseline (seed \RepPrimarySeed), with $\beta_{\mathrm{pred}}=\RepBetaPred$. Each $(\beta,\text{regime})$ cell uses $24$ stochastic replicates; bootstrap $n=400$ (stratified over the $\beta$ grid). Median \texttt{bs-out-final-tick} among extinct runs.}
   \label{tab:thresholds}
   \begin{tabular}{lcccc}
     \toprule
@@ -255,35 +190,43 @@ Table~\ref{tab:thresholds} summarises $\hat{\beta}_{\mathrm{surv}\,50}$, bootstr
   \\[0.5em]
   \begin{minipage}{\linewidth}
   \footnotesize
-  \emph{Note:} When $\hat{\beta}_{\mathrm{surv}\,50}$ equals the largest grid value, the threshold is censored; bootstrap realisations then often return the same boundary, yielding a degenerate interval.
+  \emph{Note:} $\hat{\beta}_{\mathrm{surv}\,50}$ is the smallest grid $\beta$ with survival $\ge 50\%$; bootstrap intervals ($n{=}400$ stratified resamples) quantify Monte Carlo noise on that discrete rule.
   \end{minipage}
 \end{table}
 
-Figure~\ref{fig:ratio-bar} displays the same ratios relative to the spectral prediction; Figure~\ref{fig:extinct-med} contrasts median extinction times across regimes (aggregated over $\beta$ as reported in the pipeline row for each regime).
+Table~\ref{tab:thresholds-seeds} reports $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ across all three ER draws (\texttt{expt-seed} $10001$--$10003$); cross-seed medians are \RepRatioExpMed{} (exponential), \RepRatioPLMed{} (power law), and \RepRatioLognMed{} (lognormal).
 
-\begin{figure}[htbp]
+\begin{table}[htbp]
   \centering
-  \includegraphics[width=0.62\linewidth]{fig_er_threshold_ratio_bar.png}
-  \caption{Ratio $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ on ER with bootstrap error bars (when non-degenerate); dashed line at $1$ (spectral benchmark $c{=}1$). Exponential and lognormal hit the $\beta$ grid ceiling.}
-  \label{fig:ratio-bar}
-\end{figure}
+  \small
+  \caption{Empirical survival threshold ratio $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ across independent ER draws (experiments \texttt{05}--\texttt{07}).}
+  \label{tab:thresholds-seeds}
+  \begin{tabular}{lccc}
+    \toprule
+    \texttt{expt-seed} & Exponential & Power law (Tang) & Lognormal (Tang) \\
+    \midrule
+    $10001$ & $\RepRatioExpSOne$ & $\RepRatioPLSOne$ & $\RepRatioLognSOne$ \\
+    $10002$ & $\RepRatioExpSTwo$ & $\RepRatioPLSTwo$ & $\RepRatioLognSTwo$ \\
+    $10003$ & $\RepRatioExpSThree$ & $\RepRatioPLSThree$ & $\RepRatioLognSThree$ \\
+    \midrule
+    Median & $\RepRatioExpMed$ & $\RepRatioPLMed$ & $\RepRatioLognMed$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.62\linewidth]{fig_er_median_extinct_tick.png}
-  \caption{Median \texttt{bs-out-final-tick} among extinct runs (pipeline summary per recovery regime on ER). Power-law recovery yields substantially longer extinction times than exponential or lognormal in this summary.}
-  \label{fig:extinct-med}
-\end{figure}
+Table~\ref{tab:thresholds} also reports median \texttt{bs-out-final-tick} among extinct runs (aggregated over $\beta$ per recovery regime); Tang power-law recovery yields the longest extinction times in that summary.
+
+Survival at $\beta_{\mathrm{pred}}$ remains low: $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ is $\RepCeffMin$--$\RepCeffMax$ on seed~\RepPrimarySeed{} (not $c{=}1$). At fixed $\mathbb{E}[W]$, power-law recovery has the lowest crossing ($\approx\RepThPLRatio\,\beta_{\mathrm{pred}}$), lognormal the highest ($\approx\RepThLognRatio\,\beta_{\mathrm{pred}}$); the heavy-tail hypothesis is not uniformly confirmed.
 
 \subsection{Robustness across ER draws and extinction conditioning on \texorpdfstring{$\beta$}{beta}}
 \label{sec:robustness-beta}
 
-After running experiment~\texttt{01} with the same seed list, each draw has its own $\lambda_{\max}$ and $\beta_{\mathrm{pred}}$ in \path{output/lambda_max.csv}; \path{scripts/aggregate_thresholds.py} merges thresholds onto BehaviorSpace rows by (\texttt{net\_label}, \texttt{expt-seed}). Figure~\ref{fig:ratio-seeds} compares $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ across seeds (if only one seed is present in \path{output/empirical_thresholds.csv}, the figure script writes a placeholder reminder to re-run the multi-seed experiments). Figure~\ref{fig:extinct-beta-seed} traces, for extinct runs only, the median final tick as a function of $\beta$ with one panel per seed, separating graph noise from recovery-law effects on transients. Figure~\ref{fig:extinct-violin} shows full extinction-time distributions at four illustrative $\beta$ values on the primary seed (\texttt{10001}), addressing RQ3 at finer resolution than regime-level medians.
+Each independent ER draw has its own $\lambda_{\max}$ and $\beta_{\mathrm{pred}}$. Figure~\ref{fig:ratio-seeds} compares $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ across seeds. Figure~\ref{fig:extinct-beta-seed} traces, for extinct runs only, the median final tick as a function of $\beta$ with one panel per seed, separating graph noise from recovery-law effects on transients. Figure~\ref{fig:extinct-violin} shows full extinction-time distributions at four illustrative $\beta$ values on the primary seed (\texttt{10001}), at finer resolution than regime-level medians.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{fig_er_threshold_ratio_by_seed.png}
-  \caption{Grouped comparison of $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ across independent ER draws (\texttt{expt-seed} $10001$--$10003$). After a full pipeline run with multi-seed experiments \texttt{01} and \texttt{05}--\texttt{07}, regenerate this figure with \texttt{export\_report\_figures.py} (project \texttt{scripts/} folder).}
+  \caption{Grouped comparison of $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ across independent ER draws (\texttt{expt-seed} $10001$--$10003$).}
   \label{fig:ratio-seeds}
 \end{figure}
 
@@ -301,52 +244,51 @@ After running experiment~\texttt{01} with the same seed list, each draw has its 
   \label{fig:extinct-violin}
 \end{figure}
 
-\subsection{Microscopic vs.\ mean-field prevalence}
-Experiment \texttt{08-dynamics-trajectory-ER} records per-tick microscopic prevalence (grp-SIS) and the homogeneous mean-field SIS prevalence updated in the same model. Figure~\ref{fig:traj-bands} averages microscopic trajectories over replicates at three $\beta$ values near $\beta_{\mathrm{pred}}$ (low / near / high on the sweep grid), with $95\%$ bands, addressing \textbf{RQ3} (transients and run-to-run variability); the dotted mean-field curve (middle $\beta$, one replicate) checks that the in-model ODE tracks the micro state when extinction does not intervene early. Figure~\ref{fig:traj} shows one illustrative replicate at the same experiment settings.
+Cross-seed medians in Table~\ref{tab:thresholds-seeds} confirm that $\beta_{\mathrm{pred}}$ stays conservative on every draw. Law ordering is stable but not identical across seeds. Extinction-time violins and $\beta$-faceted medians show that recovery law mainly reshapes transients among runs that die out.
+
+\subsection{Extinction times and prevalence variability}
+Experiment \texttt{08-dynamics-trajectory-ER} records per-tick microscopic prevalence (grp-SIS) and the homogeneous mean-field SIS prevalence updated in the same model. Figure~\ref{fig:traj-bands} averages microscopic trajectories over replicates at three $\beta$ values near $\beta_{\mathrm{pred}}$ (low / near / high on the sweep grid), with $95\%$ bands; the dotted mean-field curve (middle $\beta$, one replicate) checks that the in-model ODE tracks the micro state when extinction does not intervene early.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{fig_er_prevalence_trajectory_bands.png}
-  \caption{Experiment \texttt{08}: mean microscopic prevalence $\pm$ $95\%$ band over replicates ($24$ per cell), three recovery laws (columns) and $\beta$ levels (line styles). Regenerate after \texttt{run\_pipeline.py --experiment 08-dynamics-trajectory-ER}.}
+  \caption{Experiment \texttt{08}: mean microscopic prevalence $\pm$ $95\%$ band over replicates ($24$ per cell), three recovery laws (columns) and $\beta$ levels (line styles). Dotted curve: homogeneous mean-field SIS at the middle $\beta$ (one replicate).}
   \label{fig:traj-bands}
 \end{figure}
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.82\linewidth]{fig_er_prevalence_trajectory.png}
-  \caption{One BehaviorSpace run from \texttt{08-dynamics-trajectory-ER}: microscopic prevalence vs.\ NetLogo mean-field SIS curve at the same parameters.}
-  \label{fig:traj}
-\end{figure}
+When extinction does not intervene early, the in-model homogeneous mean-field curve tracks microscopic prevalence; run-to-run bands are wide near $\beta_{\mathrm{pred}}$, so variability and extinction timing matter as much as threshold location.
 
 \section{Discussion}
 \label{sec:discussion}
 
-\paragraph{Spectral benchmark vs.\ ABM survival (RQ1).}
-The empirical $\hat{\beta}_{\mathrm{surv}\,50}$ lies clearly above $\beta_{\mathrm{pred}}$: in $\tau$-space, $\hat{\tau}_{50}=\hat{\beta}_{\mathrm{surv}\,50}\mathbb{E}[W]$ corresponds to an effective multiplier $c\approx \hat{\tau}_{50}\,\lambda_{\max}$ of about $\RepCeffMin$--$\RepCeffMax$ on our grid (seed~\RepPrimarySeed), not $c{=}1$. So the mean-field spectral line is best read as a \emph{scale} or optimistic bound, not a sharp critical value, for this discrete-time, finite-$N$, agent-based grp-SIS implementation. Finite-size effects, discretisation, and spatial correlations beyond mean field are the usual explanations; the trajectory checks (Figures~\ref{fig:traj-bands}--\ref{fig:traj}) show that the \emph{homogeneous} mean-field equation itself matches the simulation when both are defined on the same state variables, so the gap in Table~\ref{tab:thresholds} is about \emph{where survival becomes likely} in the stochastic model, not about a coding inconsistency between ODE and micro-dynamics.
+\paragraph{Spectral benchmark vs.\ ABM survival.}
+The empirical $\hat{\beta}_{\mathrm{surv}\,50}$ lies clearly above $\beta_{\mathrm{pred}}$ on every ER draw and recovery law in Table~\ref{tab:thresholds-seeds}: ratios range from $\RepRatioGlobalMin$ to $\RepRatioGlobalMax$ across seeds and laws, with seed~\RepPrimarySeed{} spanning $\RepCeffMin$--$\RepCeffMax$. In $\tau$-space, $\hat{\tau}_{50}=\hat{\beta}_{\mathrm{surv}\,50}\mathbb{E}[W]$ therefore corresponds to an effective multiplier $c\approx \hat{\tau}_{50}\,\lambda_{\max}$ well above $c{=}1$, not a sharp critical value for this discrete-time, finite-$N$, agent-based grp-SIS implementation. Finite-size effects, discretisation, and correlations beyond mean field are the usual explanations; trajectory checks (Figure~\ref{fig:traj-bands}) show that the \emph{homogeneous} mean-field equation matches the simulation when both are defined on the same state variables, so the gap in Table~\ref{tab:thresholds} concerns \emph{where survival becomes likely} in the stochastic model, not a coding inconsistency between ODE and micro-dynamics.
 
-\paragraph{Recovery shape (RQ2) and dynamics (RQ3).}
-The original hypothesis emphasised easier persistence under heavy tails at fixed $\mathbb{E}[W]$. On this ER instance and $\beta$ grid, we do not see a uniform lowering of $\hat{\beta}_{\mathrm{surv}\,50}$ for \emph{both} heavy-tailed regimes: lognormal matches exponential at the grid cap, while power-law recovery crosses $50\%$ at a slightly lower $\beta$. Thus RQ2 receives a nuanced answer---possible ordering effects between specific heavy-tailed laws rather than a single ``heavy tail'' shift. For RQ3, the median extinction-time summary (Figure~\ref{fig:extinct-med}) supports the view that recovery shape reshapes \emph{transient} and extinction behaviour more visibly than a shared spectral $\beta_{\mathrm{pred}}$ might suggest: Tang power-law recovery is associated with longer extinction times in the pipeline summary. Figures~\ref{fig:extinct-violin} and~\ref{fig:late-prev} examine extinction-time distributions by $\beta$ and late-window prevalence among surviving runs, respectively.
+\paragraph{When is $\beta_{\mathrm{pred}}$ a safe conservative lower bound?}
+Within the scope of \emph{what we actually ran}---grp-SIS on ER graphs with $N{=}2000$, $\langle k\rangle\approx 6$, $I_0{=}5$, discrete-time updates, horizon \texttt{max-ticks}${}=10{,}000$, and the $\beta$ sweep $0.018$--$0.056$---a modeller may treat $\beta_{\mathrm{pred}}$ as an \emph{order-of-magnitude} planning anchor that tends to sit \emph{below} the $\beta$ at which $50\%$ of replicates are still non-extinct at the horizon: empirically by a factor of roughly $\RepRatioGlobalMin$--$\RepRatioGlobalMax$ in $\beta$ (equivalently in $\tau$ at fixed $\mathbb{E}[W]$). That reading is \textbf{conservative} in the sense that infection probabilities near $\beta_{\mathrm{pred}}$ were still associated with substantial extinction on our grid, whereas values near $\hat{\beta}_{\mathrm{surv}\,50}$ mark the onset of widespread horizon survival. It is \textbf{not} a claim that $\beta_{\mathrm{pred}}$ is the $50\%$ survival point, nor that the multiplier is universal: it depends on the discrete-time rule, finite $N$, initial seeding, horizon length, and topology. We have \emph{not} shown that the same factor applies to clustered, heavy-tailed, or empirical contact networks; those remain extrapolations. For similar ABM designs, using $\beta_{\mathrm{pred}}$ to bracket a sweep (starting below and extending to $\approx 2\,\beta_{\mathrm{pred}}$) is consistent with our data; using it as a sharp epidemic threshold without replicating would understate persistence risk.
+
+\paragraph{Recovery shape and outbreak dynamics.}
+The original hypothesis emphasised easier persistence under heavy tails at fixed $\mathbb{E}[W]$. On this ER baseline all three laws cross $50\%$ survival inside the extended grid, and the ordering is \emph{not} uniform heavy-tail lowering: Tang power-law recovery has the lowest $\hat{\beta}_{\mathrm{surv}\,50}$ (median ratio $\RepRatioPLMed$ across seeds), exponential is intermediate ($\RepRatioExpMed$), and lognormal is highest ($\RepRatioLognMed$, up to $\RepRatioGlobalMax$ on seed~$10002$). The shift between recovery laws is therefore law-specific rather than a single ``heavy tail'' effect. In the discrete-time mapping (Appendix~\ref{app:notation}), each draw is rounded to integer ticks and values below $1$ are replaced by $1$; this floor compresses the effective tail relative to the continuous law and can weaken the link between theoretical variance and early extinction risk. The Tang power law concentrates probability near short infectious periods (Figure~\ref{fig:grp-sis-schematics}), while lognormal draws retain more mass at intermediate durations despite higher overall variance---which may partly explain why lognormal recovery crosses $50\%$ survival at higher $\beta$ than the power law on this grid. Differences appear more clearly in extinction-time and prevalence variability than in a shared spectral $\beta_{\mathrm{pred}}$: Tang power-law recovery is associated with longer extinction times in Table~\ref{tab:thresholds}, while Figures~\ref{fig:extinct-violin} and~\ref{fig:late-prev} show $\beta$-dependent extinction-time distributions and late-window prevalence among surviving runs.
 
 \paragraph{Contact topology (Erd\H{o}s--R\'enyi).}
 \label{par:er-topology}
-The Erd\H{o}s--R\'enyi graph is not intended as a realistic model of empirical contact patterns. Tang et al.\ \cite{Tang2025} illustrate grp-SIS numerically on uniform regular graphs ($N{=}2500$, every node with degree $k\in\{4,6,10\}$); we instead use Erd\H{o}s--R\'enyi draws with mean degree $\approx 6$ as a controlled baseline with mild degree heterogeneity at comparable $\langle k\rangle$, and we do not attempt to reproduce their Section~3 figures. We use ER as a numerical laboratory (Introduction): topology is held fixed so that differences between recovery laws (RQ2--RQ3) and agreement with the spectral reference (RQ1) are not confounded by clustering or community structure, while degree variance remains present unlike on a $k$-regular graph. Empirical contact, partnership, or mobility networks often show heavy-tailed degree distributions (a few highly connected individuals), substantial local clustering, and assortative or modular mixing; an ER ensemble with degrees concentrated near $\langle k\rangle\approx 6$, clustering of order $\langle k\rangle/N$, and no embedded spatial or social structure differs from those features in systematic ways. In the report, ``realistic'' refers primarily to \emph{recovery-time} shape, not to the contact graph. Threshold ratios $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ and extinction-time comparisons should therefore be read as conditional on this baseline topology. Experiments \texttt{02}--\texttt{04} (lattice, ring; optional in the pipeline) and extensions to configuration-model or empirical edge lists would be the natural next steps to test whether the conservative spectral gap and recovery-law effects seen here are topology-specific.
+The Erd\H{o}s--R\'enyi graph is not intended as a realistic model of empirical contact patterns. Tang et al.\ \cite{Tang2025} illustrate grp-SIS numerically on uniform regular graphs ($N{=}2500$, every node with degree $k\in\{4,6,10\}$); we instead use Erd\H{o}s--R\'enyi draws with mean degree $\approx 6$ as a controlled baseline with mild degree heterogeneity at comparable $\langle k\rangle$, and we do not attempt to reproduce their Section~3 figures. We use ER as a numerical laboratory (Introduction): topology is held fixed so that differences between recovery laws and agreement with the spectral reference are not confounded by clustering or community structure, while degree variance remains present unlike on a $k$-regular graph. Empirical contact, partnership, or mobility networks often show heavy-tailed degree distributions (a few highly connected individuals), substantial local clustering, and assortative or modular mixing; an ER ensemble with degrees concentrated near $\langle k\rangle\approx 6$, clustering of order $\langle k\rangle/N$, and no embedded spatial or social structure differs from those features in systematic ways. In the report, ``realistic'' refers primarily to \emph{recovery-time} shape, not to the contact graph. Threshold ratios $\hat{\beta}_{\mathrm{surv}\,50}/\beta_{\mathrm{pred}}$ and extinction-time comparisons should therefore be read as conditional on this baseline topology. Experiments \texttt{02}--\texttt{04} (lattice, ring; optional extensions) and extensions to configuration-model or empirical edge lists would be the natural next steps to test whether the conservative spectral gap and recovery-law effects seen here are topology-specific.
 
-\paragraph{Risks to validity and mitigation.}
-Several design choices could mislead interpretation if left implicit; the mitigations below address some but not all limitations. \emph{(i)~Finite horizon.} Survival is defined at \texttt{max-ticks}${}=10{,}000$, so a run classified ``surviving'' may still die out later; longer horizons or absorption-time analysis would reduce this ambiguity, at higher cost. \emph{(ii)~Grid and censoring.} $\hat{\beta}_{\mathrm{surv}\,50}$ lives on a coarse $\Delta\beta=0.002$ grid and hits the upper cap for two regimes here; extending the sweep, adaptive refinement, or a logistic fit to survival vs.\ $\beta$ would narrow discretisation and boundary bias. \emph{(iii)~Initial seed.} Fixing $I_0{=}5$ targets a small outbreak; larger $I_0$ can shift finite-$N$ extinction probabilities and thus survival rates even when the infinite-population threshold is unchanged---we hold $I_0$ constant across laws but do not claim invariance to $I_0$. \emph{(iv)~Replication.} Twenty-four replicates per $(\beta,\text{regime})$ stabilise the survival fraction estimator; bootstrap intervals quantify Monte Carlo noise conditional on the graph draw, not graph ensemble uncertainty (addressed partly by multiple \texttt{expt-seed} values). \emph{(v)~Discrete time vs.\ continuous theory.} The spectral line is a continuous-time mean-field benchmark; Section~\ref{sec:methods} already notes the discrete-time mapping---treating disagreement as diagnostic of that gap is deliberate, not an implementation error.
-
-\paragraph{Limitations.}
-Estimators that hit the largest $\beta$ are censored: extending the $\beta$ grid or fitting a dose--response to survival vs.\ $\beta$ would sharpen $\hat{\beta}_{\mathrm{surv}\,50}$ for exponential and lognormal curves. The design now includes three ER draws (\texttt{expt-seed} $10001$--$10003$); Figures~\ref{fig:ratio-seeds}--\ref{fig:extinct-beta-seed} summarise cross-graph variation once those runs are available (Table~\ref{tab:thresholds} remains focused on seed $10001$ for continuity with the main text). Figure~\ref{fig:extinct-violin} illustrates extinction-time \emph{distributions} at selected $\beta$ but is not exhaustive across the full grid. The default pipeline excludes lattice/ring experiments \texttt{02}--\texttt{04}; the narrative focuses on the ER baseline aligned with \path{output/edges/edges_ER_10001.csv} for the primary spectral reference (see also Section~\ref{par:er-topology}). The study concerns synthetic disease transmission only; no human or animal data are involved.
+\paragraph{Risks to validity and future work.}
+Several design choices could mislead interpretation if left implicit. Survival is defined at \texttt{max-ticks}${}=10{,}000$, so a ``surviving'' run may still die out later. The $50\%$ threshold lives on a uniform $\Delta\beta=0.002$ grid; crossings fell inside the grid here, but discretisation still bounds precision. As explicit follow-up work, we recommend fitting a logistic dose--response curve to survival fraction versus $\beta$ (Section~\ref{sec:methods}) to obtain a continuous estimate of the $50\%$ crossing and reduce grid discretisation error. We fix $I_0{=}5$ and hold it constant across laws without an $I_0$ sensitivity sweep. Twenty-four replicates per $(\beta,\text{regime})$ stabilise survival fractions; bootstrap intervals quantify noise conditional on a graph draw, while multiple \texttt{expt-seed} values address graph ensemble uncertainty partly. The spectral line is a continuous-time mean-field benchmark applied to a discrete ABM---treating disagreement as diagnostic of that gap is deliberate. Table~\ref{tab:thresholds-seeds} and Figures~\ref{fig:ratio-seeds}--\ref{fig:extinct-beta-seed} summarise cross-graph variation; lattice/ring experiments \texttt{02}--\texttt{04} remain optional extensions. The study uses synthetic transmission only.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-For grp-SIS on a moderately dense ER graph with fixed mean recovery time, the spectral benchmark $\beta_{\mathrm{pred}}=1/(\lambda_{\max}\mathbb{E}[W])$ remains a useful scale but systematically underestimates the $\beta$ at which survival at the fixed horizon becomes common in this ABM: in $\tau$-space, $\hat{\tau}_{50}/\tau_{\mathrm{pred}}$ is about $\RepCeffMin$--$\RepCeffMax$ on our grid for seed~\RepPrimarySeed{}, not $c{=}1$. A standard heterogeneous mean-field $\beta$ from degree moments moves only slightly relative to $\beta_{\mathrm{pred}}$ and does not absorb that gap. Differences between recovery \emph{laws} show up in threshold ordering at finite resolution (power law vs.\ exponential/lognormal on this sweep) and more clearly in extinction-time summaries. Overall, heavy-tailed recovery does not uniformly lower the empirical survival threshold relative to Markovian recovery here; it interacts with the chosen law and with censoring. Extending $\beta$ sweeps, adding graph ensembles, and analysing extinction-time distributions conditional on $\beta$ would further connect Tang-style non-Markovian recovery to spectral threshold practice.
+For grp-SIS on a moderately dense ER graph with fixed mean recovery time, the spectral benchmark $\beta_{\mathrm{pred}}=1/(\lambda_{\max}\mathbb{E}[W])$ remains a useful scale but systematically underestimates the $\beta$ at which survival at the fixed horizon becomes common in this ABM: on seed~\RepPrimarySeed{}, $\hat{\tau}_{50}/\tau_{\mathrm{pred}}$ is about $\RepCeffMin$--$\RepCeffMax$; across all three ER draws and recovery laws the ratio spans $\RepRatioGlobalMin$--$\RepRatioGlobalMax$. A standard heterogeneous mean-field $\beta$ from degree moments moves only slightly relative to $\beta_{\mathrm{pred}}$ and does not absorb that gap. Recovery-law effects appear in threshold ordering (power law lowest, lognormal highest on this baseline) and more clearly in extinction-time summaries. Heavy-tailed recovery does not uniformly lower the empirical survival threshold relative to Markovian recovery here. Treating $\beta_{\mathrm{pred}}$ as a conservative order-of-magnitude lower bound for sweep design in similar ABM settings is supported by these runs; treating it as a sharp $50\%$ survival threshold or as valid on arbitrary contact topologies is not. Further graph ensembles and extinction-time analysis conditional on $\beta$ would connect Tang-style non-Markovian recovery to spectral threshold practice.
 
 \section*{Data and code availability}
+\label{sec:data-availability}
 \phantomsection
 \addcontentsline{toc}{section}{Data and code availability}
 
-BehaviorSpace table exports, edge lists, and aggregated threshold CSVs are under \path{output/} in the project repository. The NetLogo model and experiment definitions are in \path{netlogo/virus_simulation.nlogox} and \path{netlogo/behaviorspace_experiments.xml}. Figures in this PDF were generated with \path{scripts/export_report_figures.py}.
+Simulation outputs, the NetLogo model, BehaviorSpace experiment definitions, and analysis code are available in the project repository accompanying this report.
+This PDF was built on \RepReportDate{} (git revision \texttt{\RepGitHash}\RepRepoUrlPhrase{}).
 
 \begin{thebibliography}{99}
 
@@ -359,44 +301,105 @@ P.~Erd\H{o}s and A.~R\'enyi.
 E.~Cator, R.~van de Bovenkamp, and P.~Van Mieghem.
 \newblock Susceptible--infected--susceptible epidemics on networks with general infection and cure times.
 \newblock \emph{Phys.\ Rev.\ E} \textbf{87}, 062816 (2013).
+\newblock \url{https://doi.org/10.1103/PhysRevE.87.062816}.
 
 \bibitem{Chakrabarti2008}
 D.~Chakrabarti, Y.~Wang, C.~Wang, J.~Leskovec, and C.~Faloutsos.
 \newblock Epidemic thresholds in real networks.
 \newblock \emph{ACM Trans.\ Inf.\ Syst.\ Secur.} \textbf{10}, 13 (2008).
+\newblock \url{https://doi.org/10.1145/1180405.1180437}.
 
 
 \bibitem{PastorSatorras2015}
 R.~Pastor-Satorras, C.~Castellano, P.~Van Mieghem, and A.~Vespignani.
 \newblock Epidemic processes in complex networks.
 \newblock \emph{Rev.\ Mod.\ Phys.} \textbf{87}, 925--979 (2015).
+\newblock \url{https://doi.org/10.1103/RevModPhys.87.925}.
 
 
 \bibitem{Tang2025}
 J.~Tang, Y.~Yao, M.~Xie, and M.~Feng.
 \newblock SIS epidemic modelling on homogeneous networked system: General recovering process and mean-field perspective.
 \newblock \emph{Appl.\ Math.\ Modelling} (2025); preprint arXiv:2505.12290v2.
+\newblock \url{https://doi.org/10.48550/arXiv.2505.12290}.
 
 \bibitem{VanMieghem2011}
 P.~Van Mieghem.
 \newblock The $N$-intertwined SIS epidemic network model.
 \newblock \emph{Computing} \textbf{93}, 147--169 (2011).
+\newblock \url{https://doi.org/10.1007/s00607-011-0157-y}.
 
 \end{thebibliography}
 
 \clearpage
 \appendix
+
+\section{Notation, discrete-time mapping, and recovery draws}
+\label{app:notation}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Mathematical notation (discrete-time SIS on an unweighted simple graph unless noted).}
+  \label{tab:notation}
+  \begin{tabularx}{\linewidth}{@{}l X@{}}
+    \toprule
+    \textbf{Symbol} & \textbf{Meaning} \\
+    \midrule
+    $N$ & Number of nodes (agents). \\
+    $A$, $A_{ij}$ & Adjacency matrix; $A_{ij}{=}1$ if nodes $i,j$ are neighbours (unweighted graph). \\
+    $\lambda_{\max}$ & Spectral radius (largest eigenvalue of $A$) for the simulated contact network. \\
+    $W$ & Random infectious period (recovery time) at the agent level; $\mathbb{E}[W]$ is its mean, fixed across recovery regimes in our comparisons. \\
+    $\beta$ & Per-tick Bernoulli probability of transmission along an edge from an infected agent (NetLogo \emph{infection-prob}); one model tick is one discrete time step. \\
+    $\tau$ & Effective transmission intensity; we use $\tau=\beta\,\mathbb{E}[W]$ (mean per-tick success probability times mean infectious duration in ticks). \\
+    $\tau_c$ & Critical value of $\tau$ in spectral/mean-field theory; often $\tau_c\approx c/\lambda_{\max}$. \\
+    $c$ & Dimensionless prefactor in threshold scaling (mean-field benchmark $c{=}1$). \\
+    $\beta_{\mathrm{pred}}$ & Spectral prediction $\beta_{\mathrm{pred}}=1/(\lambda_{\max}\mathbb{E}[W])$ at $c{=}1$. \\
+    $\tau_{\mathrm{pred}}$ & $\tau_{\mathrm{pred}}=\beta_{\mathrm{pred}}\mathbb{E}[W]=1/\lambda_{\max}$. \\
+    $\hat{\beta}_{\mathrm{surv}\,50}$ & Smallest $\beta$ on the sweep grid for which at least $50\%$ of replicates are not extinct by the time limit (``survival'' threshold). \\
+    $\hat{\tau}_{50}$ & $\hat{\beta}_{\mathrm{surv}\,50}\,\mathbb{E}[W]$. \\
+    $\rho$ & Fraction infected (prevalence among $S{+}I$); microscopic vs.\ mean-field curves in experiment~\texttt{08}. \\
+    $S$, $I$ & Susceptible and infected compartments (SIS). \\
+    $I_0$ & Number of infected agents at $t{=}0$ (\texttt{initial-infected} in NetLogo); here $I_0{=}5$ unless noted. \\
+    $\rho_0$ & Initial prevalence $I_0/N$ (fraction of agents infected at $t{=}0$). \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{NetLogo/BehaviorSpace metrics referenced in this report.}
+  \label{tab:netlogo-cols}
+  \begin{tabularx}{\linewidth}{@{}l X@{}}
+    \toprule
+    \textbf{Name} & \textbf{Meaning} \\
+    \midrule
+    \texttt{bs-out-extinct} & Run ended in absorption with no infected agents ($1$) vs.\ infection still present at time limit ($0$). \\
+    \texttt{bs-out-final-tick} & Tick at run termination. \\
+    \texttt{bs-out-late-mean-prevalence} & Mean prevalence over a late time window (used in auxiliary persistence checks). \\
+    \texttt{bs-out-prev-grp} / \texttt{bs-out-prev-mf} & Microscopic grp-SIS prevalence vs.\ homogeneous mean-field SIS prevalence (experiment~\texttt{08}). \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\paragraph{Discrete-time infection probability and continuous-time $\tau$.}
+In the NetLogo implementation, one \emph{tick} is one discrete time step; \emph{infection-prob} is the Bernoulli probability that an infected agent transmits to a given susceptible neighbour along an existing edge during that tick. Continuous-time network SIS theory often expresses thresholds through pairwise transmission and recovery \emph{rates} \cite{VanMieghem2011,PastorSatorras2015}. With time step $\Delta t=1$ in tick units, a common small-probability link is $\beta \approx 1-e^{-\nu \Delta t}$ for an underlying per-edge rate $\nu$; for the $\beta$ values here, $\beta$ is therefore close to such a $\nu$ in numerical magnitude, but the simulation remains genuinely discrete. Comparisons to $\tau_c\approx 1/\lambda_{\max}$ should be read as \emph{benchmarking} a continuous-time mean-field scale against a discrete microscopic model.
+
+\paragraph{Recovery draw procedure (per new infection).}
+\texttt{draw-recovery-time} in NetLogo: read regime from the chooser; if exponential, sample a geometric duration with the configured mean; if lognormal (Tang), sample from the lognormal with fixed $\sigma$ and scale set so the theoretical mean matches \texttt{recovery-mean}; if power law (Tang), sample from the shifted Pareto with fixed shape and scale set for the same mean; round to integer ticks, replace any value below $1$ by $1$; store the draw as the agent's recovery countdown and decrement it once per tick until recovery.
+
 \section{BehaviorSpace experiment configurations (NetLogo)}
 \label{app:behaviorspace}
 
-This appendix documents the NetLogo BehaviorSpace experiments as defined in \path{netlogo/behaviorspace_experiments.xml} (and mirrored into \path{netlogo/virus_simulation.nlogox} for headless execution). The \textbf{default} headless pipeline (\path{scripts/run_pipeline.py --all}) runs the Erd\H{o}s--R\'enyi block \texttt{01}, \texttt{05}--\texttt{08} only; experiments \texttt{02}--\texttt{04} are retained for optional lattice/ring exploration (\texttt{--with-lattice-ring}).
+This appendix documents the NetLogo BehaviorSpace experiments used in the main analysis. The primary block comprises experiments \texttt{01} and \texttt{05}--\texttt{08} on Erd\H{o}s--R\'enyi networks; experiments \texttt{02}--\texttt{04} on lattice and ring structures are optional extensions.
 
 % Prevent overfull boxes due to long monospace parameter names/strings.
 \sloppy
 
 \subsection{Common elements}
 \begin{itemize}[leftmargin=*]
-  \item \textbf{Model}: \path{netlogo/virus_simulation.nlogox} (NetLogo 7.x).
+  \item \textbf{Model}: NetLogo grp-SIS implementation (\texttt{virus\_simulation}, version 7.x).
   \item \textbf{Exit condition (threshold experiments)}: runs stop at the time horizon or absorption,
   \[
     (\texttt{ticks} \ge \texttt{sim-tick-limit}) \ \ \text{or}\ \ (\text{no infected agents}).
@@ -404,13 +407,13 @@ This appendix documents the NetLogo BehaviorSpace experiments as defined in \pat
   \item \textbf{Key controlled settings (reported below)}: network specification (\texttt{interconnection-structure}, \texttt{network-type}, \texttt{expt-seed}, \texttt{num-nodes}, \texttt{avg-degree}), epidemic parameters (\texttt{infection-prob}, \texttt{recovery-mean}, recovery distribution chooser and its parameters), initial condition (\texttt{initial-infected}), and horizon (\texttt{max-ticks}).
 \end{itemize}
 
-\subsection{Experiment 01: network export}
+\subsection{Experiment 01: contact-network snapshot}
 \paragraph{\texttt{01-export-networks}}
 \begin{itemize}[leftmargin=*]
-  \item \textbf{Purpose}: export edge lists for subsequent computation of $\lambda_{\max}$ and mean-field reference quantities.
+  \item \textbf{Purpose}: record the contact network for subsequent computation of $\lambda_{\max}$ and mean-field reference quantities.
   \item \textbf{Repetitions}: 1.
-  \item \textbf{Setup (summary)}: disables collection of epidemic metrics; calls \texttt{export-network-edges} to write \path{output/edges/edges_\{net\}\_\{seed\}.csv}.
-  \item \textbf{Exit condition}: \texttt{true} (immediate after export).
+  \item \textbf{Setup (summary)}: disables collection of epidemic metrics; stores the contact-network adjacency structure for spectral analysis.
+  \item \textbf{Exit condition}: \texttt{true} (immediate after network recording).
   \item \textbf{Metrics}: \texttt{safe-net-label}, \texttt{count links}, \texttt{num-nodes}, \texttt{bs-out-mean-degree}.
   \item \textbf{Constants and sweeps}:
   \begin{itemize}[leftmargin=*]
@@ -423,7 +426,7 @@ This appendix documents the NetLogo BehaviorSpace experiments as defined in \pat
 \end{itemize}
 
 \subsection{Experiments 02--04: optional coarse sweeps on regular structures}
-\textit{Not run in the default ER-focused pipeline; include with \texttt{--with-lattice-ring}.}
+\textit{Optional extensions on regular structures; not part of the main ER results.}
 \paragraph{\texttt{02-threshold-exponential}}
 \begin{itemize}[leftmargin=*]
   \item \textbf{Repetitions}: 8.
@@ -456,7 +459,7 @@ This appendix documents the NetLogo BehaviorSpace experiments as defined in \pat
   \item \textbf{Recovery law}: \texttt{"exponential"} with \texttt{recovery-mean}$=$5.
   \item \textbf{Horizon}: \texttt{max-ticks}$=$10000.
   \item \textbf{Metrics}: \texttt{bs-out-extinct}, \texttt{bs-out-final-tick}, \texttt{bs-out-late-mean-prevalence}, \texttt{bs-out-tau-sim}, \texttt{bs-out-mean-degree}.
-  \item \textbf{Sweep}: stepped \texttt{infection-prob} from 0.018 to 0.048 in steps of 0.002.
+  \item \textbf{Sweep}: stepped \texttt{infection-prob} from 0.018 to 0.056 in steps of 0.002.
 \end{itemize}
 
 \paragraph{\texttt{06-baseline-ER-power-law-Tang}}
@@ -476,9 +479,9 @@ This appendix documents the NetLogo BehaviorSpace experiments as defined in \pat
 \subsection{Experiment 08: prevalence trajectories (grp-SIS vs mean-field)}
 \paragraph{\texttt{08-dynamics-trajectory-ER}}
 \begin{itemize}[leftmargin=*]
-  \item \textbf{Purpose}: export per-tick prevalence for the microscopic grp-SIS simulation and the in-model homogeneous mean-field SIS curve (Figure~\ref{fig:traj-bands}, \textbf{RQ3}).
+  \item \textbf{Purpose}: record per-tick prevalence for the microscopic grp-SIS simulation and the in-model homogeneous mean-field SIS curve (Figure~\ref{fig:traj-bands}).
   \item \textbf{Repetitions}: 24 per $(\beta,\text{recovery law})$ cell.
-  \item \textbf{RunMetricsEveryStep}: \texttt{true} (per-tick table export; large CSV).
+  \item \textbf{RunMetricsEveryStep}: \texttt{true} (records per-tick prevalence throughout each run).
   \item \textbf{Network and initial condition}: ER baseline with \texttt{expt-seed}$=$10001; \texttt{num-nodes}$=$2000; \texttt{avg-degree}$=$6; \texttt{initial-infected}$=$5.
   \item \textbf{Recovery laws}: exponential, power law (Tang, \texttt{power-law-lambda}$=$4.24), lognormal (Tang, \texttt{lognormal-sigma}$=$1); \texttt{recovery-mean}$=$5.
   \item \textbf{Horizon}: \texttt{max-ticks}$=$10000 (aligned with experiments~\texttt{05}--\texttt{07}).

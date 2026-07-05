@@ -27,3 +27,6 @@ Thumbs.db
 *.log
 *.out
 *.synctex.gz
+
+# OU submission copy (contains student number; local archive only)
+submission/

@@ -248,8 +248,8 @@ setup</setup>
       <enumeratedValueSet variable="max-ticks">
         <value value="&quot;10000&quot;"/>
       </enumeratedValueSet>
-      <!-- Fine sweep around beta_pred ≈ 1/(lambda_max * E[W]); step 0.002 on [0.018, 0.048]. -->
-      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"/>
+      <!-- Fine sweep around beta_pred ≈ 1/(lambda_max * E[W]); step 0.002 on [0.018, 0.056]. -->
+      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"/>
     </constants>
   </experiment>
   <experiment name="06-baseline-ER-power-law-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
@@ -302,7 +302,7 @@ setup</setup>
       <enumeratedValueSet variable="max-ticks">
         <value value="&quot;10000&quot;"/>
       </enumeratedValueSet>
-      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"/>
+      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"/>
     </constants>
   </experiment>
   <experiment name="07-baseline-ER-lognormal-Tang" repetitions="24" sequentialRunOrder="true" runMetricsEveryStep="false">
@@ -355,7 +355,7 @@ setup</setup>
       <enumeratedValueSet variable="max-ticks">
         <value value="&quot;10000&quot;"/>
       </enumeratedValueSet>
-      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.048"/>
+      <steppedValueSet variable="infection-prob" first="0.018" step="0.002" last="0.056"/>
     </constants>
   </experiment>
   <!-- Per-tick grp-SIS vs mean-field (RQ3): 3 recovery laws x 3 beta values near beta_pred; large CSV. -->

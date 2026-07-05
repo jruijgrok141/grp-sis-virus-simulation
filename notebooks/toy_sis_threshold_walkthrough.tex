@@ -1,0 +1,365 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+% babel dutch omitted for portable MiKTeX builds
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{multirow}
+
+\title{Toy walkthrough: spectrale SIS-drempel op een mini-netwerk\\[0.4em]
+\large Handmatige uitwerking bij het grp-SIS-onderzoeksproject}
+\author{Jan Ruijgrok \textbar\ Open Universiteit \textbar\ IM1312}
+\date{Juli 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Dit document is een \textbf{didactische versie} van het onderzoeksproject \emph{Testing a spectral epidemic threshold for SIS on networks under heavy-tailed recovery}. Alle stappen worden doorlopen met \textbf{kleine getallen} die je met pen en papier kunt nakijken. De logica is identiek aan het echte project (Erd\H{o}s--R\'enyi, $N{\approx}2000$, BehaviorSpace), maar het netwerk heeft slechts 6 knopen en 6 replicates per infectiekans~$\beta$.
+\end{abstract}
+
+\section*{Onderzoeksvraag in \'e\'en zin}
+\begin{quote}
+Klopt de spectrale drempel $\tau_c \approx 1/\lambda_{\max}$ (en de bijbehorende $\beta_{\mathrm{pred}}$) nog als we recovery-tijden \textbf{zwaar-staartig} maken, terwijl het \textbf{gemiddelde} $\mathbb{E}[W]$ gelijk blijft?
+\end{quote}
+
+\section{Overzicht: welke stappen doorrekenen?}
+
+\begin{center}
+\small
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{Stap} & \textbf{Wat} & \textbf{Toy (dit document)} & \textbf{Echt project} \\
+\midrule
+1 & Netwerk opbouwen & 6-cyclus (ring) & ER, $N{=}2000$, $\langle k\rangle{\approx}6$ \\
+2 & $\lambda_{\max}$ & cosinusformule & Python op edge-CSV \\
+3 & Spectrale voorspelling & $\beta_{\mathrm{pred}}=1/(\lambda_{\max}\mathbb{E}[W])$ & idem, $\lambda_{\max}{\approx}7{,}18$ \\
+4 & Hersteltijd $\mathbb{E}[W]{=}5$ & exp.\ / power-law / lognormal & zelfde drie regimes \\
+5 & Simulaties per $\beta$ & vaste toy-tabel (6 reps) & BehaviorSpace, 24 reps \\
+6--7 & Drempel $\hat\beta_{\mathrm{surv}\,50}$ & survival $\ge 50\%$ & idem + bootstrap CI \\
+8 & Extinctietijden (RQ3) & mediaan tick $|$ extinct & idem in rapport \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Stap 1 --- Klein contactnetwerk}
+
+In het SIS-model (susceptible--infected--susceptible) kan een agent na herstel \textbf{opnieuw} besmet raken. Infectie verspreidt zich langs \textbf{contacten} (randen). De vraag is: bij welke infectiekracht $\beta$ sterft een uitbraak uit, en wanneer blijft ze hangen?
+
+We gebruiken een \textbf{6-cyclus} (ring): elke knoop heeft precies 2 buren.
+
+\begin{center}
+\texttt{0 --- 1 --- 2}\\
+\texttt{| \hspace{3.2em} |}\\
+\texttt{5 --- 4 --- 3}
+\end{center}
+
+\textbf{Randen (6 stuks):} $(0,1)$, $(1,2)$, $(2,3)$, $(3,4)$, $(4,5)$, $(5,0)$.
+
+\subsection*{Vaste parameters}
+
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Parameter & Betekenis & Toy & Echt project \\
+\midrule
+$N$ & aantal agents & 6 & 2000 \\
+$\mathbb{E}[W]$ & gem.\ hersteltijd (ticks) & 5 & 5 \\
+$I_0$ & initieel besmet & 1 & 5 \\
+max-ticks & simulatie-horizon & 500 & 10\,000 \\
+$\beta$ & infectiekans per tick langs link & wordt gevarieerd & sweep 0.018--0.056 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Adjacency-matrix $A$}
+
+\begin{center}
+\[
+A =
+\begin{pmatrix}
+0 & 1 & 0 & 0 & 0 & 1 \\
+1 & 0 & 1 & 0 & 0 & 0 \\
+0 & 1 & 0 & 1 & 0 & 0 \\
+0 & 0 & 1 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1 & 0 & 1 \\
+1 & 0 & 0 & 0 & 1 & 0
+\end{pmatrix}
+\]
+\end{center}
+
+\textbf{Controle:} 6 randen, 6 knopen $\Rightarrow$ $\langle k\rangle = 2m/N = 12/6 = \mathbf{2}$.
+
+\section{Stap 2 --- $\lambda_{\max}$ uit de adjacency-matrix}
+
+De \textbf{grootste eigenwaarde} $\lambda_{\max}$ van $A$ hangt samen met hoe gemakkelijk infectie door het netwerk kan blijven circuleren. Voor een $N$-cyclus (circulant matrix):
+
+\[
+\lambda_j = 2\cos\!\left(\frac{2\pi j}{N}\right), \quad j=0,1,\ldots,N-1.
+\]
+
+Voor $N=6$:
+
+\begin{center}
+\begin{tabular}{@{}cc@{}}
+\toprule
+$j$ & $\lambda_j$ \\
+\midrule
+0 & $2\cos(0^\circ) = \mathbf{2}$ \\
+1 & $2\cos(60^\circ) = 1$ \\
+2 & $2\cos(120^\circ) = -1$ \\
+3 & $-2$ \\
+4 & $-1$ \\
+5 & $1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Dus \textbf{$\lambda_{\max} = 2$}.
+
+\subsection*{Graden (controle + mean-field alternatief)}
+
+\begin{itemize}[nosep]
+  \item $\langle k\rangle = 2$
+  \item $\langle k^2\rangle = 4$ (iedereen graad~2)
+  \item Homogene MF: $\tau_{\mathrm{hom}} = 1/\langle k\rangle = 0{,}50$
+  \item Heterogene MF: $\tau_{\mathrm{het}} = \langle k\rangle/\langle k^2\rangle = 0{,}50$
+\end{itemize}
+
+Op deze reguliere ring vallen spectrale en MF-referenties samen. Op jullie ER-graaf schelen ze iets ($\beta_{\mathrm{pred}}{\approx}0{,}028$ vs.\ $\beta_{\mathrm{het}}{\approx}0{,}029$).
+
+\section{Stap 3 --- Spectrale voorspelling $\beta_{\mathrm{pred}}$}
+
+Effectieve transmissie-intensiteit:
+\[
+\tau = \beta \cdot \mathbb{E}[W].
+\]
+
+Mean-field spectrale referentie ($c=1$):
+\[
+\tau_{\mathrm{pred}} = \frac{1}{\lambda_{\max}} = \frac{1}{2} = 0{,}50,
+\qquad
+\beta_{\mathrm{pred}} = \frac{\tau_{\mathrm{pred}}}{\mathbb{E}[W]} = \frac{0{,}50}{5} = \mathbf{0{,}10}.
+\]
+
+\textbf{Interpretatie:} onder de mean-field benchmark zou de grens tussen uitsterven en persisteren \emph{rond} $\beta \approx 0{,}10$ liggen. In het echte project test je of de empirische drempel $\hat\beta_{\mathrm{surv}\,50}$ daar dichtbij ligt (RQ1, exponentieel) of verschuift (RQ2, zware staarten).
+
+\section{Stap 4 --- Hersteltijdverdelingen (grp-SIS)}
+
+Het grp-SIS-kader (Tang et al.) laat de \textbf{vorm} van de hersteltijd $W$ vrij, maar houdt $\mathbb{E}[W]=5$ vast in alle drie regimes:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Regime & Karakter & Illustratieve draws $W$ (ticks) \\
+\midrule
+Exponentieel & geheugenloos & 3, 7, 4, 6, \ldots \\
+Power-law (Tang) & zware rechterstaart & 2, 3, \textbf{45}, 4, \ldots \\
+Lognormal (Tang) & brede spreiding & 1, 8, \textbf{30}, 5, \ldots \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Belangrijk:} omdat $\tau = \beta \cdot \mathbb{E}[W]$ en $\mathbb{E}[W]$ vast is, verandert $\beta_{\mathrm{pred}}$ \emph{niet} tussen regimes. Eventuele verschuivingen in $\hat\beta_{\mathrm{surv}\,50}$ komen door de \textbf{dynamiek}, niet doordat het gemiddelde herstel verschuift.
+
+\section{Stap 5 --- Simulatie-uitkomsten (toy BehaviorSpace)}
+
+Per run noteer je:
+\begin{itemize}[nosep]
+  \item \texttt{bs-out-extinct} $= 1$ als alles genezen is v\'o\'or max-ticks; anders $0$
+  \item \texttt{bs-out-final-tick} als extinct $= 1$
+\end{itemize}
+
+We gebruiken \textbf{6 replicates} per $(\beta, \text{regime})$. Hieronder: 1 = overleefd, 0 = uitgestorven.
+
+\subsection*{Exponentieel herstel}
+
+\begin{center}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+$\beta$ & Overleefd? (6 runs) & Survival rate \\
+\midrule
+0,06 & 0 0 0 0 0 0 & 0/6 = 0\% \\
+0,08 & 0 0 0 0 0 1 & 1/6 = 17\% \\
+0,10 & 0 0 0 1 0 1 & 2/6 = 33\% \\
+0,12 & 1 1 0 1 1 0 & 4/6 = \textbf{67\%} \\
+0,14 & 1 1 1 1 1 1 & 6/6 = 100\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Power-law herstel}
+
+\begin{center}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+$\beta$ & Overleefd? & Survival rate \\
+\midrule
+0,06 & 0 0 0 0 0 0 & 0\% \\
+0,08 & 0 1 0 1 0 0 & 33\% \\
+0,10 & 1 0 1 1 0 0 & \textbf{50\%} \\
+0,12 & 1 1 1 1 0 1 & 83\% \\
+0,14 & 1 1 1 1 1 1 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Lognormal herstel}
+
+\begin{center}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+$\beta$ & Overleefd? & Survival rate \\
+\midrule
+0,10 & 0 0 0 0 0 1 & 17\% \\
+0,12 & 0 0 1 0 1 0 & 33\% \\
+0,14 & 1 1 0 1 1 0 & \textbf{67\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Stap 6 \& 7 --- Survival curve en drempel $\hat\beta_{\mathrm{surv}\,50}$}
+
+\textbf{Regel} (zoals in \texttt{scripts/threshold\_estimators.py}):
+
+\begin{quote}
+$\hat\beta_{\mathrm{surv}\,50}$ = \textbf{kleinste} $\beta$ op het grid waarvoor survival rate $\ge 50\%$.
+\end{quote}
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Regime & Eerste $\beta$ met $\ge 50\%$ & $\hat\beta_{\mathrm{surv}\,50}$ & $\hat\beta / \beta_{\mathrm{pred}}$ \\
+\midrule
+Exponentieel & 0,12 (67\%) & \textbf{0,12} & 1,20 \\
+Power-law & 0,10 (50\%) & \textbf{0,10} & 1,00 \\
+Lognormal & 0,14 (67\%) & \textbf{0,14} & 1,40 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+In $\tau$-taal ($\hat\tau_{50} = \hat\beta \cdot 5$, $\tau_{\mathrm{pred}} = 0{,}50$):
+
+\begin{center}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+Regime & $\hat\tau_{50}$ & $\hat\tau_{50}/\tau_{\mathrm{pred}}$ \\
+\midrule
+Exponentieel & 0,60 & 1,20 \\
+Power-law & 0,50 & 1,00 \\
+Lognormal & 0,70 & 1,40 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Koppeling aan onderzoeksvragen}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{RQ1} (exponentieel): empirische drempel (0,12) ligt \textbf{boven} spectrale voorspelling (0,10) $\Rightarrow$ ratio 1,2. In het echte project: ratio $\approx 1{,}65$.
+  \item \textbf{RQ2}: power-law drempel \textbf{lager} (0,10), lognormal \textbf{hoger} (0,14) dan exponentieel (0,12).
+  \item \textbf{RQ3}: drempels verschillen matig; extinctietijd onderscheidt regimes sterker (stap~8).
+\end{itemize}
+
+\section{Stap 8 --- Extinctietijden (RQ3)}
+
+Bij $\beta = 0{,}12$, alleen \textbf{uitgestorven} runs:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Regime & Uitgestorven runs & Extinctieticks & Mediaan \\
+\midrule
+Exponentieel & 2 & 52, 45 & \textbf{48,5} \\
+Power-law & 1 & 28 & \textbf{28} \\
+Lognormal & 4 & 30, 25, 28, 22 & \textbf{27} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Interpretatie:} als een uitbraak uitsterft, gebeurt dat onder zware-staart-herstel \textbf{sneller} dan onder exponentieel --- terwijl power-law bij \emph{lagere} $\beta$ juist \textbf{vaker} overleeft. Drempel en extinctietijd zijn dus \textbf{verschillende} meetinstrumenten (vergelijkbaar met het rapport: median extinct tick 22 vs.\ 17 vs.\ 15).
+
+\section{Vergelijking met het echte project}
+
+\begin{center}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+ & Toy ring & Echt ER (seed 10001) \\
+\midrule
+$N$ & 6 & 2000 \\
+$\lambda_{\max}$ & 2 & 7,18 \\
+$\beta_{\mathrm{pred}}$ & 0,10 & 0,028 \\
+$\hat\beta$ exponentieel & 0,12 (ratio 1,20) & 0,046 (ratio 1,65) \\
+$\hat\beta$ power-law & 0,10 (ratio 1,00) & 0,044 (ratio 1,58) \\
+$\hat\beta$ lognormal & 0,14 (ratio 1,40) & 0,050 (ratio 1,80) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Wat blijft gelijk:} empirische drempel boven spectrale lijn; power-law laagste, lognormal hoogste; RQ3-signalen in extinctietijden.
+
+\textbf{Wat verschilt:} absolute ratios door $N$, discrete tijd en gridfijnheid ($\Delta\beta = 0{,}02$ hier vs.\ 0,002 in het rapport).
+
+\section{Inference-niveaus (Wieringa / IM1312)}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{2.2cm}p{4.2cm}p{7.5cm}@{}}
+\toprule
+\textbf{Niveau} & \textbf{Vraag} & \textbf{Voorbeeld} \\
+\midrule
+(a) Descriptief & Wat gebeurde in onze runs? & ``Bij $\beta{=}0{,}12$ overleefden 4/6 exponenti\"ele runs.'' \\
+(d) Statistisch & Generaliseert dit? & Bootstrap CI; meerdere ER-seeds in rapport \\
+(b) Abductief & Plausibele verklaring? & ``Gap door discrete tijd + eindige $N$.'' \\
+(c) Analogisch & Geldt dit elders? & ``Verwacht shift op lattice/ring'' (nog testen) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{0.5em}
+\textbf{Fout:} \emph{``Power-law recovery veroorzaakt 20\% lagere drempels.''} (causaal, niet bewezen)
+
+\textbf{Goed:} \emph{``Power-law $\hat\beta$ lag 0,02 onder exponentieel op dezelfde toy-graaf; consistent met langere infectie-staarten, maar $N{=}6$ en grof grid beperken de precisie.''}
+
+\section*{Oefeningen en antwoordsleutel}
+
+\subsection*{Opdrachten (pen en papier)}
+\begin{enumerate}[leftmargin=*]
+  \item Bereken alle zes eigenwaarden van de 6-cyclus en bevestig $\lambda_{\max}=2$.
+  \item Bereken $\beta_{\mathrm{pred}}$ met $\mathbb{E}[W]=5$.
+  \item Exponentieel, $\beta=0{,}12$: hoeveel runs hebben \texttt{extinct}$=0$? Wat is de survival rate?
+  \item Bepaal $\hat\beta_{\mathrm{surv}\,50}$ voor elk van de drie regimes.
+  \item Bereken $\hat\tau_{50} = \hat\beta_{\mathrm{surv}\,50} \cdot 5$ en $\hat\tau_{50}/\tau_{\mathrm{pred}}$ voor exponentieel.
+  \item Bij $\beta=0{,}12$: mediaan extinctietick voor exponentieel (alleen uitgestorven runs).
+  \item Welke conclusies blijven gelijk in het echte ER-project?
+\end{enumerate}
+
+\subsection*{Antwoordsleutel}
+\begin{center}
+\begin{tabular}{@{}cl@{}}
+\toprule
+\# & Antwoord \\
+\midrule
+1 & $\lambda \in \{2, 1, -1, -2, -1, 1\}$ $\Rightarrow$ max $= 2$ \\
+2 & $\beta_{\mathrm{pred}} = 1/(2 \times 5) = 0{,}10$ \\
+3 & 4 overleefd $\Rightarrow$ survival $= 4/6 \approx$ \textbf{67\%} \\
+4 & exp.\ \textbf{0,12}; power-law \textbf{0,10}; lognormal \textbf{0,14} \\
+5 & $\hat\tau_{50} = 0{,}60$; ratio $0{,}60/0{,}50 = \mathbf{1{,}20}$ \\
+6 & ticks 52 en 45 $\Rightarrow$ mediaan $(52+45)/2 =$ \textbf{48,5} \\
+7 & Drempel boven spectrale lijn; power-law laagste, lognormal hoogste; extinctietijden onderscheiden regimes sterker \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{0.5em}
+\small
+\textit{Bijbehorend Jupyter-notebook: \texttt{notebooks/toy\_sis\_threshold\_walkthrough.ipynb}. Projectrepo: master-rmai-researchproject-virussimulation.}
+
+\end{document}

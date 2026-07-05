@@ -31,11 +31,20 @@ Outputs such as exported edge lists are intended to support comparisons against 
 - **`report/report.pdf`** — Results, notation, and discussion aligned with the simulation (development copy under `report/`).
 - **`report/Further_Exploration_Report.md`** — Consolidated framing, workspace map, and follow-up ideas (some paths there refer to optional tooling or outputs that may live outside this clone).
 
-Regenerate the submission folder from the repo root after updating the report or outputs:
+## Submission (IM1312)
+
+The **deliverable folder** is `oplevering/`. Regenerate the report PDF and submission bundle from the repo root:
 
 ```text
+py -3 scripts/build_full_report.py
 py -3 scripts/build_oplevering.py
 ```
+
+`build_oplevering.py` runs `build_full_report.py` first, so a single `py -3 scripts/build_oplevering.py` is enough before upload.
+
+The report **title-page date** (`\RepReportDate`, e.g. `5 July 2026`) and **git revision** in the data-availability section are written by `scripts/write_report_macros.py` at build time (not edited by hand).
+
+**GitHub:** [github.com/jruijgrok141/grp-sis-virus-simulation](https://github.com/jruijgrok141/grp-sis-virus-simulation)
 
 ## License / citation
 
