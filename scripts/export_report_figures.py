@@ -804,13 +804,17 @@ def plot_trajectory(out_path: Path) -> None:
     plt.close(fig)
 
 
-def plot_er_network(out_path: Path, seed: int = PRIMARY_ER_SEED, n_sample: int = 420, layout_seed: int = 42) -> None:
-    """Induced subgraph on a random subset of nodes for a readable schematic."""
+def _er_subgraph_graph(
+    seed: int = PRIMARY_ER_SEED,
+    n_sample: int = 420,
+    layout_seed: int = 42,
+):
+    """Build induced ER subgraph and spring layout (shared by report and GitHub figures)."""
     edge_path = _edges_er_path(seed)
     if not edge_path.is_file():
         edge_path = ROOT / "output" / "edges" / "edges_ER_10001.csv"
     if not edge_path.is_file():
-        return
+        return None
     edges = pd.read_csv(edge_path)
     c0, c1 = edges.columns[0], edges.columns[1]
     a = pd.to_numeric(edges[c0], errors="coerce")
@@ -824,29 +828,104 @@ def plot_er_network(out_path: Path, seed: int = PRIMARY_ER_SEED, n_sample: int =
     keep = np.array([(x in pick) and (y in pick) for x, y in zip(a, b)])
     aa, bb = a[keep], b[keep]
     if len(aa) == 0:
-        return
+        return None
     try:
         import networkx as nx
     except ImportError:
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.text(0.5, 0.5, "Install networkx to render network figure:\n  pip install networkx", ha="center", va="center")
-        ax.axis("off")
-        fig.savefig(out_path, dpi=120)
-        plt.close(fig)
-        return
+        return None
 
     G = nx.Graph()
     G.add_edges_from(zip(aa.tolist(), bb.tolist()))
     pos = nx.spring_layout(G, seed=layout_seed, k=0.22, iterations=60)
+    infected = set(rng.choice(list(G.nodes()), size=min(12, len(G)), replace=False))
+    return G, pos, infected, rng
+
+
+def plot_er_network(out_path: Path, seed: int = PRIMARY_ER_SEED, n_sample: int = 420, layout_seed: int = 42) -> None:
+    """Induced subgraph on a random subset of nodes for a readable schematic."""
+    built = _er_subgraph_graph(seed=seed, n_sample=n_sample, layout_seed=layout_seed)
+    if built is None:
+        try:
+            import networkx as nx  # noqa: F401
+        except ImportError:
+            fig, ax = plt.subplots(figsize=(6, 6))
+            ax.text(
+                0.5,
+                0.5,
+                "Install networkx to render network figure:\n  pip install networkx",
+                ha="center",
+                va="center",
+            )
+            ax.axis("off")
+            fig.savefig(out_path, dpi=120)
+            plt.close(fig)
+        return
+
+    G, pos, infected, _rng = built
+    import networkx as nx
+
     fig, ax = plt.subplots(figsize=(6.8, 6.8))
     nx.draw_networkx_edges(G, pos, ax=ax, alpha=0.35, width=0.6, edge_color="0.45")
-    infected = set(rng.choice(list(G.nodes()), size=min(12, len(G)), replace=False))
     ncolor = ["#c0392b" if n in infected else "#95a5a6" for n in G.nodes()]
     nx.draw_networkx_nodes(G, pos, ax=ax, node_size=22, node_color=ncolor, linewidths=0)
     ax.axis("off")
     ax.set_title(f"ER subgraph (seed {seed}, {len(G)} nodes, $|E|={G.number_of_edges()}$), schematic layout")
     fig.tight_layout()
     fig.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
+def plot_er_network_github_settings(
+    out_path: Path,
+    seed: int = PRIMARY_ER_SEED,
+    n_sample: int = 420,
+    layout_seed: int = 42,
+) -> None:
+    """GitHub social-preview variant: 1280x640, transparent, readable on light and dark UI."""
+    built = _er_subgraph_graph(seed=seed, n_sample=n_sample, layout_seed=layout_seed)
+    if built is None:
+        return
+
+    import networkx as nx
+
+    G, pos, infected, _rng = built
+    # GitHub repository social preview: 1280 x 640 px.
+    fig_w, fig_h, dpi = 12.8, 6.4, 100
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=dpi)
+    fig.patch.set_alpha(0.0)
+    ax.set_facecolor("none")
+
+    nx.draw_networkx_edges(
+        G,
+        pos,
+        ax=ax,
+        alpha=0.65,
+        width=1.0,
+        edge_color="#8b949e",
+    )
+    ncolor = ["#ff7b72" if n in infected else "#8b949e" for n in G.nodes()]
+    nx.draw_networkx_nodes(G, pos, ax=ax, node_size=32, node_color=ncolor, linewidths=0)
+    ax.axis("off")
+
+    xs = [p[0] for p in pos.values()]
+    ys = [p[1] for p in pos.values()]
+    span = max(max(xs) - min(xs), max(ys) - min(ys), 1e-6)
+    cx = 0.5 * (min(xs) + max(xs))
+    cy = 0.5 * (min(ys) + max(ys))
+    half = 0.55 * span
+    ax.set_xlim(cx - half, cx + half)
+    ax.set_ylim(cy - half, cy + half)
+    ax.set_aspect("equal", adjustable="box")
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+
+    fig.savefig(
+        out_path,
+        dpi=dpi,
+        facecolor="none",
+        edgecolor="none",
+        transparent=True,
+        pad_inches=0,
+    )
     plt.close(fig)
 
 
@@ -1127,6 +1206,7 @@ def main() -> None:
     beta_pred = beta_pred_from_lambda_csv(primary)
 
     plot_er_network(REPORT_DIR / "er_network_example.png", seed=primary)
+    plot_er_network_github_settings(REPORT_DIR / "er_network_github_settings.png", seed=primary)
     plot_grp_sis_process_schematics(REPORT_DIR / "fig_grp_sis_process_schematics.png")
     plot_survival_curves(beta_pred, REPORT_DIR / "fig_er_survival_vs_beta.png", primary_seed=primary)
     plot_survival_curves_tau(beta_pred, REPORT_DIR / "fig_er_survival_vs_tau.png", primary_seed=primary)
